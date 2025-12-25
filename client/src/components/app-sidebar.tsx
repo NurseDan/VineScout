@@ -13,6 +13,7 @@ import {
   Brain,
   ShoppingBag,
   Shield,
+  Receipt,
 } from "lucide-react";
 import {
   Sidebar,
@@ -77,6 +78,11 @@ const menuItems = [
     title: "AI Assistant",
     url: "/ai-assistant",
     icon: Brain,
+  },
+  {
+    title: "Tax Center",
+    url: "/tax",
+    icon: Receipt,
   },
   {
     title: "Membership",

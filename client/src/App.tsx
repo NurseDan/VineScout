@@ -34,6 +34,7 @@ import MembershipPage from "@/pages/membership";
 import AIAssistantPage from "@/pages/ai-assistant";
 import MarketplacePage from "@/pages/marketplace";
 import AdminPage from "@/pages/admin";
+import TaxPage from "@/pages/tax";
 
 function Router() {
   return (
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/ai-assistant" component={AIAssistantPage} />
       <Route path="/marketplace" component={MarketplacePage} />
       <Route path="/membership" component={MembershipPage} />
+      <Route path="/tax" component={TaxPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>
