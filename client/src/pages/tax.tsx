@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -135,21 +135,30 @@ export default function TaxPage() {
     saveProfileMutation.mutate(data);
   };
 
-  const handleExportCSV = () => {
-    window.location.href = "/api/tax/export?format=csv";
+  const handleExport = async (format: 'csv' | 'json') => {
+    try {
+      const response = await fetch(`/api/tax/export?format=${format}`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tax-report-${new Date().getFullYear()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Could not download tax report.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleExportJSON = () => {
-    window.location.href = "/api/tax/export?format=json";
-  };
-
-  if (summaryLoading || profileLoading) {
-    return <TaxSkeleton />;
-  }
-
-  if (profile && !form.formState.isDirty) {
-    const currentValues = form.getValues();
-    if (currentValues.filingStatus !== profile.filingStatus) {
+  // Sync profile data to form when loaded
+  useEffect(() => {
+    if (profile && !form.formState.isDirty) {
       form.reset({
         filingStatus: profile.filingStatus || "single",
         state: profile.state || "",
@@ -161,6 +170,10 @@ export default function TaxPage() {
         businessAddress: profile.businessAddress || "",
       });
     }
+  }, [profile, form]);
+
+  if (summaryLoading || profileLoading) {
+    return <TaxSkeleton />;
   }
 
   const safeSummary = summary || {
@@ -186,11 +199,11 @@ export default function TaxPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handleExportCSV} data-testid="button-export-csv">
+          <Button variant="outline" onClick={() => handleExport('csv')} data-testid="button-export-csv">
             <Download className="mr-2 h-4 w-4" />
             Export CSV
           </Button>
-          <Button variant="outline" onClick={handleExportJSON} data-testid="button-export-json">
+          <Button variant="outline" onClick={() => handleExport('json')} data-testid="button-export-json">
             <Download className="mr-2 h-4 w-4" />
             Export JSON
           </Button>

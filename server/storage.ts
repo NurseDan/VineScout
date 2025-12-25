@@ -1113,7 +1113,7 @@ export class DatabaseStorage implements IStorage {
         stateTax: stateTax,
         totalTax: fedTax + seTax + stateTax,
         itemCount: quarterItems.length,
-        isPaid: qtr.dueDate < now,
+        isPaid: new Date(qtr.dueDate) < now,
       };
     });
     

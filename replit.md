@@ -26,6 +26,7 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 12. **AI Assistant** - AI-powered inventory analysis, storage suggestions, price predictions (premium)
 13. **Marketplace** - Sell aged inventory items (6+ months old) to other users (premium)
 14. **Admin Dashboard** - System oversight and user management for administrators
+15. **Tax Center** - Track estimated taxes, quarterly payment deadlines, IRS Direct Pay integration, CSV/JSON exports
 
 ## Tech Stack
 - **Frontend**: React 18, Vite, TanStack Query, wouter, shadcn/ui, Tailwind CSS, Recharts
@@ -150,6 +151,12 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - `GET /api/admin/users/:id` - Get user details
 - `PATCH /api/admin/users/:id` - Update user
 
+### Tax Center
+- `GET /api/tax/profile` - Get user's tax profile settings
+- `POST /api/tax/profile` - Create/update tax profile
+- `GET /api/tax/summary` - Get quarterly tax estimates and YTD summary
+- `GET /api/tax/export` - Export tax report (CSV or JSON)
+
 ## Authentication Routes
 - `GET /api/login` - Start login flow
 - `GET /api/logout` - Logout user
@@ -165,6 +172,7 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - **UploadRecord**: CSV import history (user-scoped)
 - **ApiConnection**: Third-party API connections (user-scoped)
 - **MarketplaceListing**: Items for sale with price, condition, status (user-scoped)
+- **TaxProfile**: User tax settings (filing status, state, tax rates, business info)
 
 ## Membership Tiers
 - **Free**: Basic inventory tracking, limited features
@@ -210,3 +218,4 @@ Server runs on port 5000 (both frontend and API).
 - Added Marketplace for selling aged items (premium feature)
 - Added Admin Dashboard for system oversight
 - Enhanced storage management with location hierarchy (home, garage, off-site facilities)
+- Added Tax Center with quarterly estimates, IRS payment links, and report exports
