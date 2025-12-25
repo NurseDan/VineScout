@@ -5,6 +5,9 @@ import {
   type InsertStorageUnit,
   type StorageSlot,
   type InsertStorageSlot,
+  type StorageLocation,
+  type InsertStorageLocation,
+  type StorageUnitWithLocation,
   type ScanLog,
   type InsertScanLog,
   type UploadRecord,
@@ -20,9 +23,11 @@ import {
   ITEM_STATUSES,
   API_PROVIDERS,
   LISTING_STATUSES,
+  LOCATION_TYPES,
   vineItems,
   storageUnits,
   storageSlots,
+  storageLocations,
   scanLogs,
   uploadRecords,
   apiConnections,
@@ -45,9 +50,16 @@ export interface IStorage {
   deleteItem(userId: string, id: string): Promise<boolean>;
   markItemReceived(userId: string, id: string): Promise<VineItem | undefined>;
 
+  // Storage Locations
+  getAllStorageLocations(userId: string): Promise<StorageLocation[]>;
+  getStorageLocationById(userId: string, id: string): Promise<StorageLocation | undefined>;
+  createStorageLocation(userId: string, location: Omit<InsertStorageLocation, 'userId'>): Promise<StorageLocation>;
+  updateStorageLocation(userId: string, id: string, updates: Partial<StorageLocation>): Promise<StorageLocation | undefined>;
+  deleteStorageLocation(userId: string, id: string): Promise<boolean>;
+
   // Storage Units
-  getAllStorageUnits(userId: string): Promise<StorageUnit[]>;
-  getStorageUnitById(userId: string, id: string): Promise<StorageUnit | undefined>;
+  getAllStorageUnits(userId: string): Promise<StorageUnitWithLocation[]>;
+  getStorageUnitById(userId: string, id: string): Promise<StorageUnitWithLocation | undefined>;
   createStorageUnit(userId: string, unit: Omit<InsertStorageUnit, 'userId'>): Promise<StorageUnit>;
   updateStorageUnit(userId: string, id: string, updates: Partial<StorageUnit>): Promise<StorageUnit | undefined>;
   deleteStorageUnit(userId: string, id: string): Promise<boolean>;
@@ -249,20 +261,99 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  // Storage Units
-  async getAllStorageUnits(userId: string): Promise<StorageUnit[]> {
+  // Storage Locations
+  async getAllStorageLocations(userId: string): Promise<StorageLocation[]> {
     return await db
+      .select()
+      .from(storageLocations)
+      .where(eq(storageLocations.userId, userId))
+      .orderBy(storageLocations.locationType, storageLocations.name);
+  }
+
+  async getStorageLocationById(userId: string, id: string): Promise<StorageLocation | undefined> {
+    const [location] = await db
+      .select()
+      .from(storageLocations)
+      .where(and(eq(storageLocations.id, id), eq(storageLocations.userId, userId)));
+    return location;
+  }
+
+  async createStorageLocation(userId: string, insertLocation: Omit<InsertStorageLocation, 'userId'>): Promise<StorageLocation> {
+    const id = randomUUID();
+    const [location] = await db
+      .insert(storageLocations)
+      .values({
+        id,
+        userId,
+        name: insertLocation.name,
+        locationType: insertLocation.locationType ?? LOCATION_TYPES.HOME,
+        facilityName: insertLocation.facilityName ?? null,
+        address: insertLocation.address ?? null,
+        unitNumber: insertLocation.unitNumber ?? null,
+        accessHours: insertLocation.accessHours ?? null,
+        monthlyCost: insertLocation.monthlyCost ?? null,
+        room: insertLocation.room ?? null,
+        notes: insertLocation.notes ?? null,
+      })
+      .returning();
+    return location;
+  }
+
+  async updateStorageLocation(userId: string, id: string, updates: Partial<StorageLocation>): Promise<StorageLocation | undefined> {
+    const { id: _, userId: __, ...safeUpdates } = updates;
+    const [location] = await db
+      .update(storageLocations)
+      .set(safeUpdates)
+      .where(and(eq(storageLocations.id, id), eq(storageLocations.userId, userId)))
+      .returning();
+    return location;
+  }
+
+  async deleteStorageLocation(userId: string, id: string): Promise<boolean> {
+    // First update units to remove location reference
+    await db
+      .update(storageUnits)
+      .set({ locationId: null })
+      .where(eq(storageUnits.locationId, id));
+
+    const result = await db
+      .delete(storageLocations)
+      .where(and(eq(storageLocations.id, id), eq(storageLocations.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Storage Units
+  async getAllStorageUnits(userId: string): Promise<StorageUnitWithLocation[]> {
+    const units = await db
       .select()
       .from(storageUnits)
       .where(eq(storageUnits.userId, userId));
+    
+    // Get all locations for this user to join
+    const locations = await this.getAllStorageLocations(userId);
+    const locationMap = new Map(locations.map(l => [l.id, l]));
+    
+    return units.map(unit => ({
+      ...unit,
+      location: unit.locationId ? locationMap.get(unit.locationId) ?? null : null,
+    }));
   }
 
-  async getStorageUnitById(userId: string, id: string): Promise<StorageUnit | undefined> {
+  async getStorageUnitById(userId: string, id: string): Promise<StorageUnitWithLocation | undefined> {
     const [unit] = await db
       .select()
       .from(storageUnits)
       .where(and(eq(storageUnits.id, id), eq(storageUnits.userId, userId)));
-    return unit;
+    
+    if (!unit) return undefined;
+    
+    let location: StorageLocation | null = null;
+    if (unit.locationId) {
+      location = await this.getStorageLocationById(userId, unit.locationId) ?? null;
+    }
+    
+    return { ...unit, location };
   }
 
   async createStorageUnit(userId: string, insertUnit: Omit<InsertStorageUnit, 'userId'>): Promise<StorageUnit> {
@@ -272,6 +363,7 @@ export class DatabaseStorage implements IStorage {
       .values({
         id,
         userId,
+        locationId: insertUnit.locationId ?? null,
         name: insertUnit.name,
         width: insertUnit.width,
         height: insertUnit.height,

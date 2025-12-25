@@ -35,10 +35,42 @@ export const insertVineItemSchema = createInsertSchema(vineItems).omit({ id: tru
 export type InsertVineItem = z.infer<typeof insertVineItemSchema>;
 export type VineItem = typeof vineItems.$inferSelect;
 
-// Storage Units - Physical storage space configuration (with userId)
+// Storage Locations - Parent entity for organizing storage (home, garage, off-site)
+export const storageLocations = pgTable("storage_locations", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  locationType: varchar("location_type", { length: 20 }).notNull().default("home"),
+  facilityName: varchar("facility_name", { length: 200 }),
+  address: text("address"),
+  unitNumber: varchar("unit_number", { length: 50 }),
+  accessHours: varchar("access_hours", { length: 100 }),
+  monthlyCost: real("monthly_cost"),
+  room: varchar("room", { length: 100 }),
+  notes: text("notes"),
+}, (table) => [
+  index("storage_locations_user_id_idx").on(table.userId),
+  index("storage_locations_type_idx").on(table.locationType),
+]);
+
+export const insertStorageLocationSchema = createInsertSchema(storageLocations).omit({ id: true });
+export type InsertStorageLocation = z.infer<typeof insertStorageLocationSchema>;
+export type StorageLocation = typeof storageLocations.$inferSelect;
+
+// Storage location types
+export const LOCATION_TYPES = {
+  HOME: "home",
+  GARAGE: "garage",
+  OFF_SITE: "off_site",
+} as const;
+
+export type LocationType = typeof LOCATION_TYPES[keyof typeof LOCATION_TYPES];
+
+// Storage Units - Physical storage space configuration (with userId and locationId)
 export const storageUnits = pgTable("storage_units", {
   id: varchar("id", { length: 36 }).primaryKey(),
   userId: varchar("user_id", { length: 255 }).notNull(),
+  locationId: varchar("location_id", { length: 36 }),
   name: varchar("name", { length: 100 }).notNull(),
   width: real("width").notNull(),
   height: real("height").notNull(),
@@ -47,6 +79,7 @@ export const storageUnits = pgTable("storage_units", {
   usedCapacity: real("used_capacity").default(0),
 }, (table) => [
   index("storage_units_user_id_idx").on(table.userId),
+  index("storage_units_location_id_idx").on(table.locationId),
 ]);
 
 export const insertStorageUnitSchema = createInsertSchema(storageUnits).omit({ id: true });
@@ -102,7 +135,15 @@ export type InsertUploadRecord = z.infer<typeof insertUploadRecordSchema>;
 export type UploadRecord = typeof uploadRecords.$inferSelect;
 
 // Relations
-export const storageUnitsRelations = relations(storageUnits, ({ many }) => ({
+export const storageLocationsRelations = relations(storageLocations, ({ many }) => ({
+  units: many(storageUnits),
+}));
+
+export const storageUnitsRelations = relations(storageUnits, ({ one, many }) => ({
+  location: one(storageLocations, {
+    fields: [storageUnits.locationId],
+    references: [storageLocations.id],
+  }),
   slots: many(storageSlots),
 }));
 
@@ -112,6 +153,11 @@ export const storageSlotsRelations = relations(storageSlots, ({ one }) => ({
     references: [storageUnits.id],
   }),
 }));
+
+// Extended storage unit type with location details
+export type StorageUnitWithLocation = StorageUnit & {
+  location: StorageLocation | null;
+};
 
 // Item status enum values
 export const ITEM_STATUSES = {
