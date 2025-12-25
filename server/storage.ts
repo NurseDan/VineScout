@@ -202,6 +202,10 @@ export class DatabaseStorage implements IStorage {
         storageLocation: insertItem.storageLocation ?? null,
         imageUrl: insertItem.imageUrl ?? null,
         notes: insertItem.notes ?? null,
+        lengthIn: insertItem.lengthIn ?? null,
+        widthIn: insertItem.widthIn ?? null,
+        heightIn: insertItem.heightIn ?? null,
+        weightLb: insertItem.weightLb ?? null,
       })
       .returning();
     return item;
@@ -226,6 +230,10 @@ export class DatabaseStorage implements IStorage {
       storageLocation: insertItem.storageLocation ?? null,
       imageUrl: insertItem.imageUrl ?? null,
       notes: insertItem.notes ?? null,
+      lengthIn: insertItem.lengthIn ?? null,
+      widthIn: insertItem.widthIn ?? null,
+      heightIn: insertItem.heightIn ?? null,
+      weightLb: insertItem.weightLb ?? null,
     }));
 
     const items = await db

@@ -26,6 +26,11 @@ export const vineItems = pgTable("vine_items", {
   storageLocation: varchar("storage_location", { length: 50 }),
   imageUrl: text("image_url"),
   notes: text("notes"),
+  // Item dimensions for storage matching
+  lengthIn: real("length_in"),
+  widthIn: real("width_in"),
+  heightIn: real("height_in"),
+  weightLb: real("weight_lb"),
 }, (table) => [
   index("vine_items_user_id_idx").on(table.userId),
   index("vine_items_asin_idx").on(table.asin),
