@@ -136,6 +136,14 @@ export default function UploadPage() {
       const dateStr = dateIdx >= 0 ? values[dateIdx]?.trim().replace(/"/g, "") || null : null;
 
       const taxValue = parseFloat(taxStr) || 0;
+      
+      // Build detailed error message
+      let errorMsg = "";
+      if (!asin) errorMsg += "Missing ASIN. ";
+      if (!description) errorMsg += "Missing Product Name. ";
+      if (asinIdx < 0) errorMsg += "ASIN column not found. ";
+      if (descIdx < 0) errorMsg += "Product Name column not found. ";
+      
       const isValid = asin.length > 0 && description.length > 0;
 
       items.push({
@@ -144,7 +152,7 @@ export default function UploadPage() {
         taxValue,
         orderDate: dateStr,
         isValid,
-        error: !isValid ? "Missing ASIN or description" : undefined,
+        error: !isValid ? errorMsg.trim() : undefined,
       });
     }
 
@@ -188,33 +196,36 @@ export default function UploadPage() {
 
           // Find header row (may have title row first)
           let headerRowIdx = 0;
-          const headerLine = (rows[0] as any[]).join(" ").toLowerCase();
-          if (!headerLine.includes("asin") && rows.length > 1) {
-            headerRowIdx = 1;
+          for (let i = 0; i < Math.min(5, rows.length); i++) {
+            const headerLine = (rows[i] as any[]).join(" ").toLowerCase();
+            if (headerLine.includes("asin") || headerLine.includes("product") || headerLine.includes("order")) {
+              headerRowIdx = i;
+              break;
+            }
           }
 
           const headers = (rows[headerRowIdx] as any[])
             .map((h) => (h ? String(h).toLowerCase().trim() : ""));
 
-          const asinIdx = headers.findIndex((h) => h === "asin" || h.includes("asin"));
+          // More flexible column matching
+          const asinIdx = headers.findIndex((h) => h === "asin" || h === "product id" || /asin|product.?id/.test(h));
           const descIdx = headers.findIndex((h) =>
-            h === "product name" || h === "product" || h.includes("name") ||
-            h.includes("description") || h.includes("title")
+            h === "product name" || h === "product" || h === "title" ||
+            /product.?name|product.?title|description/.test(h)
           );
           const taxIdx = headers.findIndex((h) =>
-            h === "estimated tax value" || h.includes("tax value") ||
-            h.includes("etv") || h.includes("value") || h.includes("price")
+            h === "estimated tax value" || h === "etv" ||
+            /tax|value|price|estimated/.test(h)
           );
           const dateIdx = headers.findIndex((h) =>
-            h === "order date" || h === "ordered" ||
-            (h.includes("order") && h.includes("date"))
+            h === "order date" || /order.?date|ordered/.test(h)
           );
 
           const items: ParsedItem[] = [];
 
           for (let i = headerRowIdx + 1; i < rows.length; i++) {
             const row = rows[i] as any[];
-            if (!row || row.length === 0) continue;
+            if (!row || row.every((cell) => !cell)) continue; // Skip completely empty rows
 
             const asin = asinIdx >= 0 ? String(row[asinIdx] || "").trim() : "";
             const description = descIdx >= 0 ? String(row[descIdx] || "").trim() : "";
@@ -222,6 +233,14 @@ export default function UploadPage() {
             const dateStr = dateIdx >= 0 ? String(row[dateIdx] || "").trim() : null;
 
             const taxValue = parseFloat(taxStr) || 0;
+            
+            // Build detailed error message
+            let errorMsg = "";
+            if (!asin) errorMsg += "Missing ASIN. ";
+            if (!description) errorMsg += "Missing Product Name. ";
+            if (asinIdx < 0) errorMsg += "ASIN column not found. ";
+            if (descIdx < 0) errorMsg += "Product Name column not found. ";
+            
             const isValid = asin.length > 0 && description.length > 0;
 
             items.push({
@@ -230,7 +249,7 @@ export default function UploadPage() {
               taxValue,
               orderDate: dateStr,
               isValid,
-              error: !isValid ? "Missing ASIN or description" : undefined,
+              error: !isValid ? errorMsg.trim() : undefined,
             });
           }
 
@@ -481,14 +500,14 @@ export default function UploadPage() {
                   <TableRow>
                     <TableHead className="w-12">Status</TableHead>
                     <TableHead className="w-32">ASIN</TableHead>
-                    <TableHead>Description</TableHead>
+                    <TableHead className="flex-1">Description</TableHead>
                     <TableHead className="w-24 text-right">Tax Value</TableHead>
-                    <TableHead className="w-32">Order Date</TableHead>
+                    <TableHead>Error/Info</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {parsedItems.slice(0, 50).map((item, idx) => (
-                    <TableRow key={idx} data-testid={`preview-row-${idx}`}>
+                    <TableRow key={idx} data-testid={`preview-row-${idx}`} className={item.isValid ? "" : "bg-destructive/5"}>
                       <TableCell>
                         {item.isValid ? (
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -499,14 +518,18 @@ export default function UploadPage() {
                       <TableCell className="font-mono text-sm">
                         {item.asin || "-"}
                       </TableCell>
-                      <TableCell className="max-w-xs truncate">
+                      <TableCell className="max-w-xs truncate text-sm">
                         {item.description || "-"}
                       </TableCell>
-                      <TableCell className="text-right font-mono">
+                      <TableCell className="text-right font-mono text-sm">
                         ${item.taxValue.toFixed(2)}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {item.orderDate || "-"}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {item.error ? (
+                          <span className="text-destructive font-medium">{item.error}</span>
+                        ) : (
+                          <span className="text-green-600">Valid</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
