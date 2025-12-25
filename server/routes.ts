@@ -14,22 +14,21 @@ function getUserId(req: any): string {
   return req.user?.claims?.sub;
 }
 
-// Admin middleware - checks if user ID is in ADMIN_USER_IDS env variable
-function isAdmin(req: any, res: Response, next: NextFunction) {
-  const userId = getUserId(req);
-  const adminUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
-  
-  if (!adminUserIds.includes(userId)) {
-    return res.status(403).json({ error: "Access denied. Admin privileges required." });
+// Admin middleware - checks if user is marked as admin in database
+async function isAdmin(req: any, res: Response, next: NextFunction) {
+  try {
+    const userId = getUserId(req);
+    const user = await storage.getUser(userId);
+    
+    if (!user?.isAdmin) {
+      return res.status(403).json({ error: "Access denied. Admin privileges required." });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ error: "Failed to check admin status" });
   }
-  next();
 }
 
-// Helper to check if a user is admin
-function checkIsAdmin(userId: string): boolean {
-  const adminUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
-  return adminUserIds.includes(userId);
-}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -955,7 +954,8 @@ export async function registerRoutes(
   app.get("/api/auth/user/is-admin", isAuthenticated, async (req, res) => {
     try {
       const userId = getUserId(req);
-      res.json({ isAdmin: checkIsAdmin(userId) });
+      const user = await storage.getUser(userId);
+      res.json({ isAdmin: user?.isAdmin || false });
     } catch (error) {
       console.error("Error checking admin status:", error);
       res.status(500).json({ error: "Failed to check admin status" });
