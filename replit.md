@@ -16,7 +16,7 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 2. **CSV Upload** - Import Vine order data from Amazon exports
 3. **Inventory Management** - Full CRUD with search/filter
 4. **Barcode Scanner** - USB scanner support via text input
-5. **Storage Manager** - Configure physical shelving, intelligent placement algorithm
+5. **Storage Manager** - Multi-location storage with home, garage, and off-site facility support
 6. **Label Generator** - Create Dymo-compatible labels with print preview
 7. **Analytics** - Charts for review trends, item values, and status distribution
 8. **Data Export** - Export inventory to CSV or JSON
@@ -96,8 +96,14 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - `POST /api/items/:id/receive` - Mark item received
 - `POST /api/scan` - Scan ASIN and lookup item
 - `GET /api/scans/recent` - Recent scan logs
-- `GET /api/storage/units` - All storage units
+- `GET /api/storage/locations` - All storage locations
+- `GET /api/storage/locations/:id` - Get storage location
+- `POST /api/storage/locations` - Create storage location
+- `PATCH /api/storage/locations/:id` - Update storage location
+- `DELETE /api/storage/locations/:id` - Delete storage location
+- `GET /api/storage/units` - All storage units (with location data)
 - `POST /api/storage/units` - Create storage unit
+- `PATCH /api/storage/units/:id` - Update storage unit
 - `DELETE /api/storage/units/:id` - Delete storage unit
 - `POST /api/storage/find-placement` - Find optimal storage slot
 - `GET /api/uploads` - Upload history
@@ -152,7 +158,8 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 ## Data Models
 - **User**: Replit Auth user (id, email, name, profile image, stripeCustomerId, stripeSubscriptionId)
 - **VineItem**: ASIN, description, tax value, dates, status, storage location (user-scoped)
-- **StorageUnit**: Name, dimensions, shelves, utilization (user-scoped)
+- **StorageLocation**: Parent entity for storage (home, garage, off_site) with facility-specific metadata (user-scoped)
+- **StorageUnit**: Name, dimensions, shelves, utilization, linked to location (user-scoped)
 - **StorageSlot**: Individual shelf positions within units
 - **ScanLog**: Scan history with timestamps (user-scoped)
 - **UploadRecord**: CSV import history (user-scoped)
@@ -202,3 +209,4 @@ Server runs on port 5000 (both frontend and API).
 - Added AI Inventory Assistant (premium feature)
 - Added Marketplace for selling aged items (premium feature)
 - Added Admin Dashboard for system oversight
+- Enhanced storage management with location hierarchy (home, garage, off-site facilities)
