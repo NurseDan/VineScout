@@ -14,6 +14,23 @@ function getUserId(req: any): string {
   return req.user?.claims?.sub;
 }
 
+// Admin middleware - checks if user ID is in ADMIN_USER_IDS env variable
+function isAdmin(req: any, res: Response, next: NextFunction) {
+  const userId = getUserId(req);
+  const adminUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+  
+  if (!adminUserIds.includes(userId)) {
+    return res.status(403).json({ error: "Access denied. Admin privileges required." });
+  }
+  next();
+}
+
+// Helper to check if a user is admin
+function checkIsAdmin(userId: string): boolean {
+  const adminUserIds = (process.env.ADMIN_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
+  return adminUserIds.includes(userId);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -861,6 +878,65 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error marking listing as sold:", error);
       res.status(500).json({ error: "Failed to mark listing as sold" });
+    }
+  });
+
+  // Admin check endpoint
+  app.get("/api/auth/user/is-admin", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      res.json({ isAdmin: checkIsAdmin(userId) });
+    } catch (error) {
+      console.error("Error checking admin status:", error);
+      res.status(500).json({ error: "Failed to check admin status" });
+    }
+  });
+
+  // Admin Routes
+  app.get("/api/admin/stats", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const stats = await storage.getSystemStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching admin stats:", error);
+      res.status(500).json({ error: "Failed to fetch system stats" });
+    }
+  });
+
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsersAdmin();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching admin users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUserByIdAdmin(req.params.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user details:", error);
+      res.status(500).json({ error: "Failed to fetch user details" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const updates = req.body;
+      const user = await storage.updateUserAdmin(req.params.id, updates);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Failed to update user" });
     }
   });
 

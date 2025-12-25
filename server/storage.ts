@@ -99,7 +99,37 @@ export interface IStorage {
   updateListing(userId: string, listingId: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
   deleteListing(userId: string, listingId: string): Promise<boolean>;
   markListingAsSold(userId: string, listingId: string): Promise<MarketplaceListing | undefined>;
+
+  // Admin methods
+  getSystemStats(): Promise<AdminSystemStats>;
+  getAllUsersAdmin(): Promise<AdminUserInfo[]>;
+  getUserByIdAdmin(userId: string): Promise<AdminUserDetail | undefined>;
+  updateUserAdmin(userId: string, updates: Partial<User>): Promise<User | undefined>;
 }
+
+// Admin types
+export type AdminSystemStats = {
+  totalUsers: number;
+  totalItems: number;
+  totalListings: number;
+  activeSubscriptions: number;
+};
+
+export type AdminUserInfo = {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  stripeSubscriptionId: string | null;
+  createdAt: Date | null;
+  itemsCount: number;
+};
+
+export type AdminUserDetail = AdminUserInfo & {
+  profileImageUrl: string | null;
+  stripeCustomerId: string | null;
+  updatedAt: Date | null;
+};
 
 export class DatabaseStorage implements IStorage {
   // Vine Items
@@ -818,6 +848,82 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(marketplaceListings.id, listingId), eq(marketplaceListings.userId, userId)))
       .returning();
     return listing;
+  }
+
+  // Admin methods
+  async getSystemStats(): Promise<AdminSystemStats> {
+    const [userCount] = await db.select({ count: count() }).from(users);
+    const [itemCount] = await db.select({ count: count() }).from(vineItems);
+    const [listingCount] = await db.select({ count: count() }).from(marketplaceListings);
+    
+    const allUsers = await db.select().from(users);
+    const activeSubscriptions = allUsers.filter(u => u.stripeSubscriptionId).length;
+
+    return {
+      totalUsers: userCount.count,
+      totalItems: itemCount.count,
+      totalListings: listingCount.count,
+      activeSubscriptions,
+    };
+  }
+
+  async getAllUsersAdmin(): Promise<AdminUserInfo[]> {
+    const allUsers = await db
+      .select()
+      .from(users)
+      .orderBy(desc(users.createdAt));
+
+    const result: AdminUserInfo[] = [];
+    for (const user of allUsers) {
+      const [itemCountResult] = await db
+        .select({ count: count() })
+        .from(vineItems)
+        .where(eq(vineItems.userId, user.id));
+
+      result.push({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        stripeSubscriptionId: user.stripeSubscriptionId,
+        createdAt: user.createdAt,
+        itemsCount: itemCountResult.count,
+      });
+    }
+    return result;
+  }
+
+  async getUserByIdAdmin(userId: string): Promise<AdminUserDetail | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) return undefined;
+
+    const [itemCountResult] = await db
+      .select({ count: count() })
+      .from(vineItems)
+      .where(eq(vineItems.userId, userId));
+
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      stripeSubscriptionId: user.stripeSubscriptionId,
+      stripeCustomerId: user.stripeCustomerId,
+      profileImageUrl: user.profileImageUrl,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      itemsCount: itemCountResult.count,
+    };
+  }
+
+  async updateUserAdmin(userId: string, updates: Partial<User>): Promise<User | undefined> {
+    const { id: _, ...safeUpdates } = updates;
+    const [user] = await db
+      .update(users)
+      .set({ ...safeUpdates, updatedAt: new Date() })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
   }
 }
 

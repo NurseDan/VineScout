@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Upload,
@@ -11,6 +12,7 @@ import {
   CreditCard,
   Brain,
   ShoppingBag,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -85,6 +87,11 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { data: isAdminData } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/auth/user/is-admin"],
+  });
+
+  const isAdmin = isAdminData?.isAdmin === true;
 
   return (
     <Sidebar>
@@ -118,6 +125,20 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/admin"}
+                    data-testid="nav-admin"
+                  >
+                    <Link href="/admin">
+                      <Shield className="h-4 w-4" />
+                      <span>Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
