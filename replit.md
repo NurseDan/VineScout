@@ -175,9 +175,9 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - **TaxProfile**: User tax settings (filing status, state, tax rates, business info)
 
 ## Membership Tiers
-- **Free**: Basic inventory tracking, limited features
-- **Pro ($9.99/mo)**: Advanced analytics, AI assistant, unlimited storage
-- **Business ($29.99/mo)**: All features, marketplace access, API integrations, priority support
+- **Starter (Free forever)**: Basic inventory (up to 100 items), CSV import, basic analytics, single storage location
+- **Pro ($9.99/mo - 30-day free trial)**: Unlimited items, advanced analytics, AI assistant, multi-location storage, label generation, marketplace access
+- **Business ($29.99/mo)**: Team collaboration (5 users), API access, custom integrations, webhook support, dedicated support
 
 ## Item Lifecycle
 1. **Ordered** - Initial state from CSV import
@@ -219,3 +219,5 @@ Server runs on port 5000 (both frontend and API).
 - Added Admin Dashboard for system oversight
 - Enhanced storage management with location hierarchy (home, garage, off-site facilities)
 - Added Tax Center with quarterly estimates, IRS payment links, and report exports
+- Added 3-tier membership system with 30-day free trial for Pro plan
+- Added trial tracking (trialEndsAt field) to user model

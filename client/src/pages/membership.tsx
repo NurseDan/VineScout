@@ -41,26 +41,35 @@ const tierIcons: Record<string, typeof Star> = {
 
 const tierFeatures: Record<string, string[]> = {
   free: [
+    "Up to 100 inventory items",
     "Basic inventory tracking",
-    "Up to 100 items",
     "Manual CSV import",
-    "Basic analytics",
+    "Basic dashboard & analytics",
+    "Barcode scanning (USB only)",
+    "Single storage location",
   ],
   pro: [
     "Unlimited inventory items",
-    "Advanced analytics dashboard",
+    "30-day free trial",
+    "Advanced analytics & charts",
     "Email import from Gmail",
-    "Barcode scanning",
-    "Storage optimization",
+    "Barcode scanning with device sync",
+    "Multi-location storage management",
+    "AI inventory assistant",
+    "Label generation & printing",
     "Priority email support",
   ],
   business: [
     "Everything in Pro",
-    "API access",
-    "Team collaboration",
-    "Custom integrations",
-    "Dedicated support",
-    "White-label options",
+    "Team collaboration (up to 5 users)",
+    "API access for integrations",
+    "Custom Keepa & Rainforest API connections",
+    "Marketplace to sell aged inventory",
+    "Tax center & quarterly estimates",
+    "Advanced storage optimization",
+    "Webhook integrations",
+    "Dedicated account manager",
+    "Custom integrations support",
   ],
 };
 
@@ -75,12 +84,14 @@ function MembershipTierCard({
   product, 
   isCurrentPlan,
   onSubscribe,
-  isSubscribing
+  isSubscribing,
+  hasActiveTrial
 }: { 
   product: Product;
   isCurrentPlan: boolean;
   onSubscribe: (priceId: string) => void;
   isSubscribing: boolean;
+  hasActiveTrial?: boolean;
 }) {
   const tierKey = product.metadata?.tier?.toLowerCase() || product.name.toLowerCase();
   const Icon = tierIcons[tierKey] || Star;
@@ -114,6 +125,9 @@ function MembershipTierCard({
               </span>
               {price.recurring && (
                 <span className="text-muted-foreground">/{price.recurring.interval}</span>
+              )}
+              {tierKey === 'pro' && (
+                <div className="text-xs text-primary mt-1 font-medium">30-day free trial</div>
               )}
             </>
           )}
@@ -260,8 +274,8 @@ function MembershipContent() {
   const defaultTiers: Product[] = [
     {
       id: 'free',
-      name: 'Free',
-      description: 'Perfect for getting started',
+      name: 'Starter',
+      description: 'Essential inventory management',
       active: true,
       metadata: { tier: 'free' },
       prices: [],
@@ -269,7 +283,7 @@ function MembershipContent() {
     {
       id: 'pro',
       name: 'Pro',
-      description: 'For power users who need more',
+      description: 'Everything you need - try free for 30 days',
       active: true,
       metadata: { tier: 'pro' },
       prices: [{ id: 'price_pro', unit_amount: 999, currency: 'usd', recurring: { interval: 'month' }, active: true, metadata: null }],
@@ -277,7 +291,7 @@ function MembershipContent() {
     {
       id: 'business',
       name: 'Business',
-      description: 'For teams and enterprises',
+      description: 'Team collaboration & advanced features',
       active: true,
       metadata: { tier: 'business' },
       prices: [{ id: 'price_business', unit_amount: 2999, currency: 'usd', recurring: { interval: 'month' }, active: true, metadata: null }],
