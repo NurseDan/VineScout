@@ -574,15 +574,29 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Bin dimensions (length, width, height) are required" });
       }
 
+      const parsedLength = parseFloat(lengthIn);
+      const parsedWidth = parseFloat(widthIn);
+      const parsedHeight = parseFloat(heightIn);
+      const parsedWeight = maxWeightLb ? parseFloat(maxWeightLb) : undefined;
+
       const items = await storage.findFittingItems(
         userId,
-        parseFloat(lengthIn),
-        parseFloat(widthIn),
-        parseFloat(heightIn),
-        maxWeightLb ? parseFloat(maxWeightLb) : undefined
+        parsedLength,
+        parsedWidth,
+        parsedHeight,
+        parsedWeight
       );
 
-      res.json({ items, count: items.length });
+      res.json({
+        items,
+        count: items.length,
+        binDimensions: {
+          lengthIn: parsedLength,
+          widthIn: parsedWidth,
+          heightIn: parsedHeight,
+          maxWeightLb: parsedWeight,
+        },
+      });
     } catch (error) {
       console.error("Error finding fitting items:", error);
       res.status(500).json({ error: "Failed to find fitting items" });

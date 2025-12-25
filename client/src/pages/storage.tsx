@@ -52,6 +52,9 @@ import {
   Clock,
   DollarSign,
   ChevronRight,
+  Search,
+  Scale,
+  Package,
 } from "lucide-react";
 import type { StorageUnit, StorageLocation, StorageUnitWithLocation, VineItem } from "@shared/schema";
 
@@ -107,11 +110,24 @@ const packageDimensionsSchema = z.object({
 
 type PackageDimensionsFormData = z.infer<typeof packageDimensionsSchema>;
 
+const binDimensionsSchema = z.object({
+  lengthIn: z.coerce.number().min(0.1, "Length must be positive"),
+  widthIn: z.coerce.number().min(0.1, "Width must be positive"),
+  heightIn: z.coerce.number().min(0.1, "Height must be positive"),
+  maxWeightLb: z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? undefined : Number(val)),
+    z.number().positive("Weight must be positive").optional()
+  ),
+});
+
+type BinDimensionsFormData = z.infer<typeof binDimensionsSchema>;
+
 export default function StoragePage() {
   const { toast } = useToast();
   const [addLocationOpen, setAddLocationOpen] = useState(false);
   const [addUnitOpen, setAddUnitOpen] = useState(false);
   const [measureOpen, setMeasureOpen] = useState(false);
+  const [findFittingOpen, setFindFittingOpen] = useState(false);
   const [selectedLocationType, setSelectedLocationType] = useState<string>("home");
   const [activeTab, setActiveTab] = useState<string>("all");
   const [placementResult, setPlacementResult] = useState<{
@@ -119,6 +135,8 @@ export default function StoragePage() {
     slot: string;
     item: VineItem;
   } | null>(null);
+  const [fittingItems, setFittingItems] = useState<VineItem[] | null>(null);
+  const [binDimensions, setBinDimensions] = useState<BinDimensionsFormData | null>(null);
 
   const { data: storageLocations, isLoading: locationsLoading } = useQuery<StorageLocation[]>({
     queryKey: ["/api/storage/locations"],
@@ -247,6 +265,33 @@ export default function StoragePage() {
     },
   });
 
+  const findFittingItemsMutation = useMutation({
+    mutationFn: async (data: BinDimensionsFormData) => {
+      const response = await apiRequest("POST", "/api/storage/find-fitting-items", data);
+      return response.json();
+    },
+    onSuccess: (data: { items: VineItem[]; count: number; binDimensions: BinDimensionsFormData }) => {
+      setFittingItems(data.items);
+      setBinDimensions(data.binDimensions);
+      setFindFittingOpen(false);
+      if (data.items.length > 0) {
+        toast({ title: `${data.count} items found that fit this bin` });
+      } else {
+        toast({
+          title: "No matching items",
+          description: "No items with recorded dimensions fit this bin. Make sure your items have dimensions set.",
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Search failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) {
     return <StorageSkeleton />;
   }
@@ -277,7 +322,7 @@ export default function StoragePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between gap-4">
@@ -350,6 +395,31 @@ export default function StoragePage() {
             </Dialog>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardContent className="flex items-center justify-center pt-6">
+            <Dialog open={findFittingOpen} onOpenChange={setFindFittingOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full gap-2" data-testid="button-find-fitting">
+                  <Search className="h-4 w-4" />
+                  Find Fitting Items
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Bin Dimensions</DialogTitle>
+                  <DialogDescription>
+                    Enter your storage bin dimensions to find items that will fit
+                  </DialogDescription>
+                </DialogHeader>
+                <BinDimensionsForm
+                  onSubmit={(data) => findFittingItemsMutation.mutate(data)}
+                  isPending={findFittingItemsMutation.isPending}
+                />
+              </DialogContent>
+            </Dialog>
+          </CardContent>
+        </Card>
       </div>
 
       {placementResult && (
@@ -392,6 +462,64 @@ export default function StoragePage() {
                 )}
                 Assign Location
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {fittingItems && fittingItems.length > 0 && (
+        <Card className="border-green-500">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center justify-between gap-2 text-lg font-medium">
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-green-500" />
+                Items That Fit ({fittingItems.length})
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setFittingItems(null)}
+                data-testid="button-clear-fitting-results"
+              >
+                Clear
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              These items will fit in a bin measuring {binDimensions?.lengthIn}" x {binDimensions?.widthIn}" x {binDimensions?.heightIn}"
+              {binDimensions?.maxWeightLb && ` (max ${binDimensions.maxWeightLb} lb)`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 max-h-64 overflow-y-auto">
+              {fittingItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-4 p-3 rounded-lg border"
+                  data-testid={`fitting-item-${item.id}`}
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+                    <Package className="h-5 w-5 text-green-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-sm font-medium">{item.asin}</div>
+                    <div className="text-sm text-muted-foreground truncate">
+                      {item.description}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Ruler className="h-3 w-3" />
+                      {item.lengthIn}" x {item.widthIn}" x {item.heightIn}"
+                    </div>
+                    {item.weightLb && (
+                      <div className="flex items-center gap-1">
+                        <Scale className="h-3 w-3" />
+                        {item.weightLb} lb
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -1235,6 +1363,107 @@ function PackageDimensionsForm({
             <>
               <MapPin className="mr-2 h-4 w-4" />
               Find Placement
+            </>
+          )}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+function BinDimensionsForm({
+  onSubmit,
+  isPending,
+}: {
+  onSubmit: (data: BinDimensionsFormData) => void;
+  isPending: boolean;
+}) {
+  const form = useForm<BinDimensionsFormData>({
+    resolver: zodResolver(binDimensionsSchema),
+    defaultValues: {
+      lengthIn: 0,
+      widthIn: 0,
+      heightIn: 0,
+      maxWeightLb: undefined,
+    },
+  });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <FormField
+            control={form.control}
+            name="lengthIn"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Length (in)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" {...field} data-testid="input-bin-length" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="widthIn"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Width (in)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" {...field} data-testid="input-bin-width" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="heightIn"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Height (in)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.1" {...field} data-testid="input-bin-height" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="maxWeightLb"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Max Weight (lb, optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  step="0.1"
+                  placeholder="Leave empty for no limit"
+                  {...field}
+                  value={field.value ?? ""}
+                  data-testid="input-bin-max-weight"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Button type="submit" disabled={isPending} data-testid="button-find-fitting-items">
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Searching...
+            </>
+          ) : (
+            <>
+              <Search className="mr-2 h-4 w-4" />
+              Find Fitting Items
             </>
           )}
         </Button>
