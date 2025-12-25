@@ -81,22 +81,57 @@ export default function UploadPage() {
       return [];
     }
 
-    const headers = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/"/g, ""));
-    const asinIdx = headers.findIndex((h) => h.includes("asin") || h === "product id");
-    const descIdx = headers.findIndex((h) => h.includes("description") || h.includes("title") || h.includes("product"));
-    const taxIdx = headers.findIndex((h) => h.includes("tax") || h.includes("value") || h.includes("price"));
-    const dateIdx = headers.findIndex((h) => h.includes("date") || h.includes("ordered"));
+    // Detect delimiter: tab or comma
+    // Amazon Vine exports use tabs, standard CSV uses commas
+    const firstDataLine = lines.find((line, idx) => idx > 0 && line.trim().length > 0);
+    const isTabDelimited = lines[0].includes("\t") || (firstDataLine && firstDataLine.includes("\t"));
+    const delimiter = isTabDelimited ? "\t" : ",";
+
+    // Find the header row - Amazon Vine exports may have a title row before headers
+    let headerRowIdx = 0;
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const line = lines[i].toLowerCase();
+      if (line.includes("asin") || line.includes("product") || line.includes("order")) {
+        headerRowIdx = i;
+        break;
+      }
+    }
+
+    const headerLine = lines[headerRowIdx];
+    const headers = headerLine.toLowerCase().split(delimiter).map((h) => h.trim().replace(/"/g, ""));
+    
+    // Map common Amazon Vine column names
+    const asinIdx = headers.findIndex((h) => h === "asin" || h.includes("asin") || h === "product id");
+    const descIdx = headers.findIndex((h) => 
+      h === "product name" || h === "product" || h.includes("name") || 
+      h.includes("description") || h.includes("title")
+    );
+    const taxIdx = headers.findIndex((h) => 
+      h === "estimated tax value" || h.includes("tax value") || 
+      h.includes("etv") || h.includes("value") || h.includes("price")
+    );
+    const dateIdx = headers.findIndex((h) => 
+      h === "order date" || h === "ordered" || 
+      (h.includes("order") && h.includes("date"))
+    );
 
     const items: ParsedItem[] = [];
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
+    for (let i = headerRowIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0) continue;
+      
+      // Parse line based on delimiter
+      const values = isTabDelimited 
+        ? line.split("\t").map(v => v.trim().replace(/"/g, ""))
+        : parseCSVLine(line);
+      
       if (values.length === 0) continue;
 
-      const asin = asinIdx >= 0 ? values[asinIdx]?.trim().replace(/"/g, "") : "";
-      const description = descIdx >= 0 ? values[descIdx]?.trim().replace(/"/g, "") : "";
-      const taxStr = taxIdx >= 0 ? values[taxIdx]?.trim().replace(/[^0-9.]/g, "") : "0";
-      const dateStr = dateIdx >= 0 ? values[dateIdx]?.trim().replace(/"/g, "") : null;
+      const asin = asinIdx >= 0 ? values[asinIdx]?.trim().replace(/"/g, "") || "" : "";
+      const description = descIdx >= 0 ? values[descIdx]?.trim().replace(/"/g, "") || "" : "";
+      const taxStr = taxIdx >= 0 ? values[taxIdx]?.trim().replace(/[^0-9.]/g, "") || "0" : "0";
+      const dateStr = dateIdx >= 0 ? values[dateIdx]?.trim().replace(/"/g, "") || null : null;
 
       const taxValue = parseFloat(taxStr) || 0;
       const isValid = asin.length > 0 && description.length > 0;
