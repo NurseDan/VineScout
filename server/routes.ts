@@ -470,5 +470,88 @@ export async function registerRoutes(
     }
   });
 
+  // Gmail Integration Routes
+  app.get("/api/gmail/status", isAuthenticated, async (req, res) => {
+    try {
+      const { isGmailConnected } = await import("./gmail");
+      const connected = await isGmailConnected();
+      res.json({ connected });
+    } catch (error) {
+      res.json({ connected: false });
+    }
+  });
+
+  app.get("/api/gmail/search", isAuthenticated, async (req, res) => {
+    try {
+      const { searchVineEmails } = await import("./gmail");
+      const maxResults = parseInt(req.query.maxResults as string) || 50;
+      const emails = await searchVineEmails(maxResults);
+      res.json(emails);
+    } catch (error) {
+      console.error("Error searching Gmail:", error);
+      res.status(500).json({ error: "Failed to search Gmail. Make sure Gmail is connected." });
+    }
+  });
+
+  // Gmail import schema for validation
+  const gmailImportItemSchema = z.object({
+    asin: z.string().min(10).max(20).transform(s => s.toUpperCase()),
+    description: z.string().optional(),
+    orderDate: z.string().optional(),
+    emailId: z.string().optional(),
+  });
+  const gmailImportSchema = z.object({
+    items: z.array(gmailImportItemSchema).min(1).max(100),
+  });
+
+  app.post("/api/gmail/import", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      
+      // Validate input with Zod
+      const validatedData = gmailImportSchema.parse(req.body);
+      const { items } = validatedData;
+
+      const importedItems = [];
+      const skippedItems = [];
+
+      for (const item of items) {
+        const existing = await storage.getItemByAsin(userId, item.asin);
+        if (existing) {
+          skippedItems.push(item.asin);
+          continue;
+        }
+
+        const newItem = await storage.createItem(userId, {
+          asin: item.asin,
+          description: item.description || `Vine Item ${item.asin}`,
+          orderDate: item.orderDate ? new Date(item.orderDate) : new Date(),
+          status: "ordered",
+        });
+        importedItems.push(newItem);
+      }
+
+      await storage.createUploadRecord(userId, {
+        filename: `gmail-import-${new Date().toISOString()}`,
+        uploadedAt: new Date(),
+        itemsImported: importedItems.length,
+        status: "completed",
+      });
+
+      res.json({
+        imported: importedItems.length,
+        skipped: skippedItems.length,
+        skippedAsins: skippedItems,
+        items: importedItems,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid import data", details: error.errors });
+      }
+      console.error("Error importing from Gmail:", error);
+      res.status(500).json({ error: "Failed to import items from Gmail" });
+    }
+  });
+
   return httpServer;
 }

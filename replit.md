@@ -18,6 +18,8 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 6. **Label Generator** - Create Dymo-compatible labels with print preview
 7. **Analytics** - Charts for review trends, item values, and status distribution
 8. **Data Export** - Export inventory to CSV or JSON
+9. **API Connections** - Connect third-party ASIN data APIs (Keepa, Rainforest)
+10. **Gmail Import** - Import Vine orders directly from Amazon email notifications
 
 ## Tech Stack
 - **Frontend**: React 18, Vite, TanStack Query, wouter, shadcn/ui, Tailwind CSS, Recharts
@@ -79,6 +81,14 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - `POST /api/storage/find-placement` - Find optimal storage slot
 - `GET /api/uploads` - Upload history
 - `GET /api/export/items` - Export inventory (CSV/JSON)
+- `GET /api/connections` - User's API connections
+- `POST /api/connections` - Create API connection
+- `PATCH /api/connections/:id` - Update API connection
+- `DELETE /api/connections/:id` - Delete API connection
+- `POST /api/connections/:id/test` - Test API connection
+- `GET /api/gmail/status` - Check Gmail connection status
+- `GET /api/gmail/search` - Search Vine emails
+- `POST /api/gmail/import` - Import items from emails
 
 ## Authentication Routes
 - `GET /api/login` - Start login flow
@@ -92,6 +102,7 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - **StorageSlot**: Individual shelf positions within units
 - **ScanLog**: Scan history with timestamps (user-scoped)
 - **UploadRecord**: CSV import history (user-scoped)
+- **ApiConnection**: Third-party API connections (Keepa, Rainforest, Gmail) (user-scoped)
 
 ## Item Lifecycle
 1. **Ordered** - Initial state from CSV import
@@ -123,3 +134,5 @@ Server runs on port 5000 (both frontend and API).
 - Added data export (CSV/JSON)
 - Updated all API endpoints to be protected
 - Added landing page for unauthenticated users
+- Added API Connections page (Keepa, Rainforest API)
+- Added Gmail integration for importing Vine orders from emails
