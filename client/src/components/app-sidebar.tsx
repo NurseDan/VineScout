@@ -9,6 +9,7 @@ import {
   BarChart3,
   Link2,
   CreditCard,
+  Brain,
 } from "lucide-react";
 import {
   Sidebar,
@@ -63,6 +64,11 @@ const menuItems = [
     title: "Connections",
     url: "/connections",
     icon: Link2,
+  },
+  {
+    title: "AI Assistant",
+    url: "/ai-assistant",
+    icon: Brain,
   },
   {
     title: "Membership",

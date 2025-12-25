@@ -6,6 +6,7 @@ import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { stripeService } from "./stripeService";
 import { getStripePublishableKey } from "./stripeClient";
+import { analyzeInventory, suggestOptimalStorage, generateReviewReminder, predictSellPrice } from "./ai-assistant";
 
 // Helper to get userId from authenticated request
 function getUserId(req: any): string {
@@ -668,6 +669,99 @@ export async function registerRoutes(
       }
       console.error("Error importing from Gmail:", error);
       res.status(500).json({ error: "Failed to import items from Gmail" });
+    }
+  });
+
+  // AI Assistant Routes (Premium Only)
+  const requirePremium = async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const userId = getUserId(req);
+      const user = await storage.getUser(userId);
+      if (!user?.stripeSubscriptionId) {
+        return res.status(403).json({ 
+          error: "Premium subscription required",
+          upgradeRequired: true 
+        });
+      }
+      next();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to verify subscription" });
+    }
+  };
+
+  app.post("/api/ai/analyze", isAuthenticated, requirePremium, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const items = await storage.getAllItems(userId);
+      const analysis = await analyzeInventory(items);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error analyzing inventory:", error);
+      res.status(500).json({ error: "Failed to analyze inventory" });
+    }
+  });
+
+  app.post("/api/ai/suggest-storage", isAuthenticated, requirePremium, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { itemId } = req.body;
+      if (!itemId) {
+        return res.status(400).json({ error: "itemId is required" });
+      }
+
+      const item = await storage.getItemById(userId, itemId);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      const storageUnits = await storage.getAllStorageUnits(userId);
+      const suggestion = await suggestOptimalStorage(item, storageUnits);
+      res.json(suggestion);
+    } catch (error) {
+      console.error("Error suggesting storage:", error);
+      res.status(500).json({ error: "Failed to get storage suggestion" });
+    }
+  });
+
+  app.post("/api/ai/review-reminder", isAuthenticated, requirePremium, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { itemId } = req.body;
+      if (!itemId) {
+        return res.status(400).json({ error: "itemId is required" });
+      }
+
+      const item = await storage.getItemById(userId, itemId);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      const reminder = await generateReviewReminder(item);
+      res.json(reminder);
+    } catch (error) {
+      console.error("Error generating review reminder:", error);
+      res.status(500).json({ error: "Failed to generate review reminder" });
+    }
+  });
+
+  app.post("/api/ai/sell-price", isAuthenticated, requirePremium, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { itemId } = req.body;
+      if (!itemId) {
+        return res.status(400).json({ error: "itemId is required" });
+      }
+
+      const item = await storage.getItemById(userId, itemId);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      const pricing = await predictSellPrice(item);
+      res.json(pricing);
+    } catch (error) {
+      console.error("Error predicting sell price:", error);
+      res.status(500).json({ error: "Failed to predict sell price" });
     }
   });
 

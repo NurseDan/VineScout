@@ -31,6 +31,7 @@ import AnalyticsPage from "@/pages/analytics";
 import ConnectionsPage from "@/pages/connections";
 import LandingPage from "@/pages/landing";
 import MembershipPage from "@/pages/membership";
+import AIAssistantPage from "@/pages/ai-assistant";
 
 function Router() {
   return (
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/labels" component={LabelsPage} />
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/connections" component={ConnectionsPage} />
+      <Route path="/ai-assistant" component={AIAssistantPage} />
       <Route path="/membership" component={MembershipPage} />
       <Route component={NotFound} />
     </Switch>

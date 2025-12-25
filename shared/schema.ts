@@ -6,6 +6,9 @@ import { relations } from "drizzle-orm";
 // Re-export auth models
 export * from "./models/auth";
 
+// Re-export chat models for AI assistant
+export * from "./models/chat";
+
 // Vine Items - Core product tracking (with userId for multi-tenant support)
 export const vineItems = pgTable("vine_items", {
   id: varchar("id", { length: 36 }).primaryKey(),
