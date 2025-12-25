@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -41,6 +42,11 @@ import {
   ShoppingCart,
   Truck,
   Star,
+  Ruler,
+  Scale,
+  Edit2,
+  Save,
+  X,
 } from "lucide-react";
 import type { VineItem, ITEM_STATUSES } from "@shared/schema";
 import { format, differenceInDays, addDays, addMonths } from "date-fns";
@@ -273,6 +279,50 @@ function ItemDetailModal({
   onClose: () => void;
   onUpdateStatus: (status: string) => void;
 }) {
+  const { toast } = useToast();
+  const [editingDimensions, setEditingDimensions] = useState(false);
+  const [dimensions, setDimensions] = useState({
+    lengthIn: "",
+    widthIn: "",
+    heightIn: "",
+    weightLb: "",
+  });
+
+  const updateDimensionsMutation = useMutation({
+    mutationFn: async (data: { lengthIn: number | null; widthIn: number | null; heightIn: number | null; weightLb: number | null }) => {
+      return apiRequest("PATCH", `/api/items/${item?.id}`, data);
+    },
+    onSuccess: () => {
+      toast({ title: "Dimensions updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+      setEditingDimensions(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update dimensions", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleEditDimensions = () => {
+    if (item) {
+      setDimensions({
+        lengthIn: item.lengthIn?.toString() || "",
+        widthIn: item.widthIn?.toString() || "",
+        heightIn: item.heightIn?.toString() || "",
+        weightLb: item.weightLb?.toString() || "",
+      });
+      setEditingDimensions(true);
+    }
+  };
+
+  const handleSaveDimensions = () => {
+    updateDimensionsMutation.mutate({
+      lengthIn: dimensions.lengthIn ? parseFloat(dimensions.lengthIn) : null,
+      widthIn: dimensions.widthIn ? parseFloat(dimensions.widthIn) : null,
+      heightIn: dimensions.heightIn ? parseFloat(dimensions.heightIn) : null,
+      weightLb: dimensions.weightLb ? parseFloat(dimensions.weightLb) : null,
+    });
+  };
+
   if (!item) return null;
 
   const status = statusConfig[item.status] || statusConfig.ordered;
@@ -282,6 +332,11 @@ function ItemDetailModal({
   const receivedDate = item.receivedDate ? new Date(item.receivedDate) : null;
   const reviewDueDate = item.reviewDueDate ? new Date(item.reviewDueDate) : null;
   const sellableDate = item.sellableDate ? new Date(item.sellableDate) : null;
+
+  const hasDimensions = item.lengthIn || item.widthIn || item.heightIn;
+  const dimensionString = hasDimensions
+    ? `${item.lengthIn || 0}" x ${item.widthIn || 0}" x ${item.heightIn || 0}"`
+    : "Not set";
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
@@ -346,7 +401,7 @@ function ItemDetailModal({
             </div>
           </div>
 
-          {/* Right Column - Timeline */}
+          {/* Right Column - Timeline & Dimensions */}
           <div className="flex flex-col gap-4">
             <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
               Timeline
@@ -378,6 +433,112 @@ function ItemDetailModal({
                 date={sellableDate}
                 completed={item.status === "sellable"}
               />
+            </div>
+
+            {/* Dimensions Section */}
+            <div className="mt-2 border-t pt-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                  <Ruler className="h-4 w-4" />
+                  Dimensions
+                </span>
+                {!editingDimensions && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleEditDimensions}
+                    data-testid="button-edit-dimensions"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+
+              {editingDimensions ? (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">Length (in)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="L"
+                        value={dimensions.lengthIn}
+                        onChange={(e) => setDimensions({ ...dimensions, lengthIn: e.target.value })}
+                        data-testid="input-length"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">Width (in)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="W"
+                        value={dimensions.widthIn}
+                        onChange={(e) => setDimensions({ ...dimensions, widthIn: e.target.value })}
+                        data-testid="input-width"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-xs">Height (in)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="H"
+                        value={dimensions.heightIn}
+                        onChange={(e) => setDimensions({ ...dimensions, heightIn: e.target.value })}
+                        data-testid="input-height"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs">Weight (lb)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="Weight"
+                      value={dimensions.weightLb}
+                      onChange={(e) => setDimensions({ ...dimensions, weightLb: e.target.value })}
+                      data-testid="input-weight"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveDimensions}
+                      disabled={updateDimensionsMutation.isPending}
+                      data-testid="button-save-dimensions"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditingDimensions(false)}
+                      data-testid="button-cancel-dimensions"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Ruler className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-sm" data-testid="detail-dimensions">
+                      {dimensionString}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Scale className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-mono text-sm" data-testid="detail-weight">
+                      {item.weightLb ? `${item.weightLb} lb` : "Not set"}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
