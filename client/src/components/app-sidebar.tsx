@@ -7,6 +7,7 @@ import {
   Warehouse,
   Tag,
   BarChart3,
+  Link2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -56,6 +57,11 @@ const menuItems = [
     title: "Analytics",
     url: "/analytics",
     icon: BarChart3,
+  },
+  {
+    title: "Connections",
+    url: "/connections",
+    icon: Link2,
   },
 ];
 

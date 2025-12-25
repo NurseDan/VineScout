@@ -153,3 +153,29 @@ export type AnalyticsData = {
   itemsByMonth: { month: string; count: number; value: number }[];
   reviewTrend: { month: string; completed: number; pending: number }[];
 };
+
+// API Connections - Third-party service integrations (with userId)
+export const apiConnections = pgTable("api_connections", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  provider: varchar("provider", { length: 50 }).notNull(),
+  apiKey: text("api_key"),
+  isActive: boolean("is_active").default(true),
+  lastTested: timestamp("last_tested"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("api_connections_user_id_idx").on(table.userId),
+]);
+
+export const insertApiConnectionSchema = createInsertSchema(apiConnections).omit({ id: true, createdAt: true });
+export type InsertApiConnection = z.infer<typeof insertApiConnectionSchema>;
+export type ApiConnection = typeof apiConnections.$inferSelect;
+
+// API Connection providers
+export const API_PROVIDERS = {
+  KEEPA: "keepa",
+  RAINFOREST: "rainforest",
+  GMAIL: "gmail",
+} as const;
+
+export type ApiProvider = typeof API_PROVIDERS[keyof typeof API_PROVIDERS];

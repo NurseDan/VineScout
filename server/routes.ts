@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertVineItemSchema, insertStorageUnitSchema, ITEM_STATUSES } from "@shared/schema";
+import { insertVineItemSchema, insertStorageUnitSchema, insertApiConnectionSchema, ITEM_STATUSES } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
@@ -355,6 +355,79 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error finding placement:", error);
       res.status(500).json({ error: "Failed to find placement" });
+    }
+  });
+
+  // API Connections CRUD
+  app.get("/api/connections", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const connections = await storage.getApiConnections(userId);
+      res.json(connections);
+    } catch (error) {
+      console.error("Error fetching API connections:", error);
+      res.status(500).json({ error: "Failed to fetch API connections" });
+    }
+  });
+
+  app.post("/api/connections", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const validatedData = insertApiConnectionSchema.omit({ userId: true }).parse(req.body);
+      
+      const existing = await storage.getApiConnectionByProvider(userId, validatedData.provider);
+      if (existing) {
+        return res.status(400).json({ error: "Connection for this provider already exists" });
+      }
+      
+      const connection = await storage.createApiConnection(userId, validatedData);
+      res.status(201).json(connection);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid connection data", details: error.errors });
+      }
+      console.error("Error creating API connection:", error);
+      res.status(500).json({ error: "Failed to create API connection" });
+    }
+  });
+
+  app.patch("/api/connections/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const updates = req.body;
+      const connection = await storage.updateApiConnection(userId, req.params.id, updates);
+      if (!connection) {
+        return res.status(404).json({ error: "Connection not found" });
+      }
+      res.json(connection);
+    } catch (error) {
+      console.error("Error updating API connection:", error);
+      res.status(500).json({ error: "Failed to update API connection" });
+    }
+  });
+
+  app.delete("/api/connections/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const deleted = await storage.deleteApiConnection(userId, req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Connection not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting API connection:", error);
+      res.status(500).json({ error: "Failed to delete API connection" });
+    }
+  });
+
+  app.post("/api/connections/:id/test", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await storage.testApiConnection(userId, req.params.id);
+      res.json(result);
+    } catch (error) {
+      console.error("Error testing API connection:", error);
+      res.status(500).json({ error: "Failed to test API connection" });
     }
   });
 

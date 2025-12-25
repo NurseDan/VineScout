@@ -28,6 +28,7 @@ import ScanPage from "@/pages/scan";
 import StoragePage from "@/pages/storage";
 import LabelsPage from "@/pages/labels";
 import AnalyticsPage from "@/pages/analytics";
+import ConnectionsPage from "@/pages/connections";
 import LandingPage from "@/pages/landing";
 
 function Router() {
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/storage" component={StoragePage} />
       <Route path="/labels" component={LabelsPage} />
       <Route path="/analytics" component={AnalyticsPage} />
+      <Route path="/connections" component={ConnectionsPage} />
       <Route component={NotFound} />
     </Switch>
   );

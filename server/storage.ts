@@ -11,12 +11,16 @@ import {
   type InsertUploadRecord,
   type DashboardStats,
   type AnalyticsData,
+  type ApiConnection,
+  type InsertApiConnection,
   ITEM_STATUSES,
+  API_PROVIDERS,
   vineItems,
   storageUnits,
   storageSlots,
   scanLogs,
   uploadRecords,
+  apiConnections,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, count, inArray } from "drizzle-orm";
@@ -63,6 +67,14 @@ export interface IStorage {
     height: number,
     depth: number
   ): Promise<{ unit: string; slot: string; item: VineItem } | null>;
+
+  // API Connections
+  getApiConnections(userId: string): Promise<ApiConnection[]>;
+  getApiConnectionByProvider(userId: string, provider: string): Promise<ApiConnection | undefined>;
+  createApiConnection(userId: string, data: Omit<InsertApiConnection, 'userId'>): Promise<ApiConnection>;
+  updateApiConnection(userId: string, id: string, updates: Partial<ApiConnection>): Promise<ApiConnection | undefined>;
+  deleteApiConnection(userId: string, id: string): Promise<boolean>;
+  testApiConnection(userId: string, id: string): Promise<{ success: boolean; message: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -520,6 +532,109 @@ export class DatabaseStorage implements IStorage {
     }
 
     return null;
+  }
+
+  // API Connections
+  async getApiConnections(userId: string): Promise<ApiConnection[]> {
+    return await db
+      .select()
+      .from(apiConnections)
+      .where(eq(apiConnections.userId, userId))
+      .orderBy(desc(apiConnections.createdAt));
+  }
+
+  async getApiConnectionByProvider(userId: string, provider: string): Promise<ApiConnection | undefined> {
+    const [connection] = await db
+      .select()
+      .from(apiConnections)
+      .where(and(eq(apiConnections.userId, userId), eq(apiConnections.provider, provider)));
+    return connection;
+  }
+
+  async createApiConnection(userId: string, data: Omit<InsertApiConnection, 'userId'>): Promise<ApiConnection> {
+    const id = randomUUID();
+    const [connection] = await db
+      .insert(apiConnections)
+      .values({
+        id,
+        userId,
+        provider: data.provider,
+        apiKey: data.apiKey ?? null,
+        isActive: data.isActive ?? true,
+        lastTested: data.lastTested ?? null,
+      })
+      .returning();
+    return connection;
+  }
+
+  async updateApiConnection(userId: string, id: string, updates: Partial<ApiConnection>): Promise<ApiConnection | undefined> {
+    const { id: _, userId: __, ...safeUpdates } = updates;
+    const [connection] = await db
+      .update(apiConnections)
+      .set(safeUpdates)
+      .where(and(eq(apiConnections.id, id), eq(apiConnections.userId, userId)))
+      .returning();
+    return connection;
+  }
+
+  async deleteApiConnection(userId: string, id: string): Promise<boolean> {
+    const result = await db
+      .delete(apiConnections)
+      .where(and(eq(apiConnections.id, id), eq(apiConnections.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async testApiConnection(userId: string, id: string): Promise<{ success: boolean; message: string }> {
+    const [connection] = await db
+      .select()
+      .from(apiConnections)
+      .where(and(eq(apiConnections.id, id), eq(apiConnections.userId, userId)));
+
+    if (!connection) {
+      return { success: false, message: "Connection not found" };
+    }
+
+    try {
+      if (connection.provider === API_PROVIDERS.KEEPA) {
+        if (!connection.apiKey) {
+          return { success: false, message: "API key is required" };
+        }
+        const response = await fetch(`https://api.keepa.com/token?key=${connection.apiKey}`);
+        if (response.ok) {
+          await db
+            .update(apiConnections)
+            .set({ lastTested: new Date(), isActive: true })
+            .where(eq(apiConnections.id, id));
+          return { success: true, message: "Keepa API connection successful" };
+        }
+        return { success: false, message: "Keepa API key is invalid" };
+      }
+
+      if (connection.provider === API_PROVIDERS.RAINFOREST) {
+        if (!connection.apiKey) {
+          return { success: false, message: "API key is required" };
+        }
+        const response = await fetch(`https://api.rainforestapi.com/request?api_key=${connection.apiKey}&type=account`);
+        if (response.ok) {
+          await db
+            .update(apiConnections)
+            .set({ lastTested: new Date(), isActive: true })
+            .where(eq(apiConnections.id, id));
+          return { success: true, message: "Rainforest API connection successful" };
+        }
+        return { success: false, message: "Rainforest API key is invalid" };
+      }
+
+      if (connection.provider === API_PROVIDERS.GMAIL) {
+        return { success: false, message: "Gmail requires OAuth authentication. This feature is coming soon." };
+      }
+
+      return { success: false, message: "Unknown provider" };
+    } catch (error) {
+      console.error("Error testing API connection:", error);
+      return { success: false, message: "Failed to test connection. Please try again." };
+    }
   }
 }
 
