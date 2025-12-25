@@ -6,6 +6,7 @@ import {
   ScanBarcode,
   Warehouse,
   Tag,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,6 +52,11 @@ const menuItems = [
     url: "/labels",
     icon: Tag,
   },
+  {
+    title: "Analytics",
+    url: "/analytics",
+    icon: BarChart3,
+  },
 ];
 
 export function AppSidebar() {
@@ -94,7 +100,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-4">
         <div className="text-xs text-muted-foreground">
-          Designed for Raspberry Pi
+          Vine Tracker Pro
         </div>
       </SidebarFooter>
     </Sidebar>

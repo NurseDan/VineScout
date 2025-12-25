@@ -9,50 +9,55 @@ import {
   type InsertScanLog,
   type UploadRecord,
   type InsertUploadRecord,
-  type User,
-  type InsertUser,
   type DashboardStats,
+  type AnalyticsData,
   ITEM_STATUSES,
+  vineItems,
+  storageUnits,
+  storageSlots,
+  scanLogs,
+  uploadRecords,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and, gte, lte, sql, count, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { addDays, addMonths, subDays, isWithinInterval, startOfWeek, endOfWeek } from "date-fns";
+import { addDays, addMonths, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 
 export interface IStorage {
-  // Users
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
   // Vine Items
-  getAllItems(): Promise<VineItem[]>;
-  getItemById(id: string): Promise<VineItem | undefined>;
-  getItemByAsin(asin: string): Promise<VineItem | undefined>;
-  createItem(item: InsertVineItem): Promise<VineItem>;
-  createItemsBulk(items: InsertVineItem[]): Promise<VineItem[]>;
-  updateItem(id: string, updates: Partial<VineItem>): Promise<VineItem | undefined>;
-  deleteItem(id: string): Promise<boolean>;
-  markItemReceived(id: string): Promise<VineItem | undefined>;
+  getAllItems(userId: string): Promise<VineItem[]>;
+  getItemById(userId: string, id: string): Promise<VineItem | undefined>;
+  getItemByAsin(userId: string, asin: string): Promise<VineItem | undefined>;
+  createItem(userId: string, item: Omit<InsertVineItem, 'userId'>): Promise<VineItem>;
+  createItemsBulk(userId: string, items: Omit<InsertVineItem, 'userId'>[]): Promise<VineItem[]>;
+  updateItem(userId: string, id: string, updates: Partial<VineItem>): Promise<VineItem | undefined>;
+  deleteItem(userId: string, id: string): Promise<boolean>;
+  markItemReceived(userId: string, id: string): Promise<VineItem | undefined>;
 
   // Storage Units
-  getAllStorageUnits(): Promise<StorageUnit[]>;
-  getStorageUnitById(id: string): Promise<StorageUnit | undefined>;
-  createStorageUnit(unit: InsertStorageUnit): Promise<StorageUnit>;
-  updateStorageUnit(id: string, updates: Partial<StorageUnit>): Promise<StorageUnit | undefined>;
-  deleteStorageUnit(id: string): Promise<boolean>;
+  getAllStorageUnits(userId: string): Promise<StorageUnit[]>;
+  getStorageUnitById(userId: string, id: string): Promise<StorageUnit | undefined>;
+  createStorageUnit(userId: string, unit: Omit<InsertStorageUnit, 'userId'>): Promise<StorageUnit>;
+  updateStorageUnit(userId: string, id: string, updates: Partial<StorageUnit>): Promise<StorageUnit | undefined>;
+  deleteStorageUnit(userId: string, id: string): Promise<boolean>;
 
   // Scan Logs
-  getRecentScans(limit?: number): Promise<ScanLog[]>;
-  createScanLog(log: InsertScanLog): Promise<ScanLog>;
+  getRecentScans(userId: string, limit?: number): Promise<ScanLog[]>;
+  createScanLog(userId: string, log: Omit<InsertScanLog, 'userId'>): Promise<ScanLog>;
 
   // Upload Records
-  getAllUploadRecords(): Promise<UploadRecord[]>;
-  createUploadRecord(record: InsertUploadRecord): Promise<UploadRecord>;
+  getAllUploadRecords(userId: string): Promise<UploadRecord[]>;
+  createUploadRecord(userId: string, record: Omit<InsertUploadRecord, 'userId'>): Promise<UploadRecord>;
 
   // Dashboard
-  getDashboardStats(): Promise<DashboardStats>;
+  getDashboardStats(userId: string): Promise<DashboardStats>;
+
+  // Analytics
+  getAnalytics(userId: string): Promise<AnalyticsData>;
 
   // Storage Placement
   findOptimalPlacement(
+    userId: string,
     asin: string,
     width: number,
     height: number,
@@ -60,64 +65,66 @@ export interface IStorage {
   ): Promise<{ unit: string; slot: string; item: VineItem } | null>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private items: Map<string, VineItem>;
-  private storageUnits: Map<string, StorageUnit>;
-  private storageSlots: Map<string, StorageSlot>;
-  private scanLogs: Map<string, ScanLog>;
-  private uploadRecords: Map<string, UploadRecord>;
-
-  constructor() {
-    this.users = new Map();
-    this.items = new Map();
-    this.storageUnits = new Map();
-    this.storageSlots = new Map();
-    this.scanLogs = new Map();
-    this.uploadRecords = new Map();
-  }
-
-  // Users
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
-  }
-
+export class DatabaseStorage implements IStorage {
   // Vine Items
-  async getAllItems(): Promise<VineItem[]> {
-    return Array.from(this.items.values()).sort((a, b) => {
-      const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
-      const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
-      return dateB - dateA;
-    });
+  async getAllItems(userId: string): Promise<VineItem[]> {
+    return await db
+      .select()
+      .from(vineItems)
+      .where(eq(vineItems.userId, userId))
+      .orderBy(desc(vineItems.orderDate));
   }
 
-  async getItemById(id: string): Promise<VineItem | undefined> {
-    return this.items.get(id);
+  async getItemById(userId: string, id: string): Promise<VineItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(vineItems)
+      .where(and(eq(vineItems.id, id), eq(vineItems.userId, userId)));
+    return item;
   }
 
-  async getItemByAsin(asin: string): Promise<VineItem | undefined> {
-    return Array.from(this.items.values()).find(
-      (item) => item.asin.toUpperCase() === asin.toUpperCase()
-    );
+  async getItemByAsin(userId: string, asin: string): Promise<VineItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(vineItems)
+      .where(and(
+        eq(vineItems.userId, userId),
+        sql`UPPER(${vineItems.asin}) = UPPER(${asin})`
+      ));
+    return item;
   }
 
-  async createItem(insertItem: InsertVineItem): Promise<VineItem> {
+  async createItem(userId: string, insertItem: Omit<InsertVineItem, 'userId'>): Promise<VineItem> {
     const id = randomUUID();
-    const item: VineItem = {
-      id,
+    const [item] = await db
+      .insert(vineItems)
+      .values({
+        id,
+        userId,
+        asin: insertItem.asin,
+        description: insertItem.description,
+        taxValue: insertItem.taxValue ?? 0,
+        orderDate: insertItem.orderDate ?? null,
+        trackingNumber: insertItem.trackingNumber ?? null,
+        receivedDate: insertItem.receivedDate ?? null,
+        reviewDueDate: insertItem.reviewDueDate ?? null,
+        reviewCompletedDate: insertItem.reviewCompletedDate ?? null,
+        sellableDate: insertItem.sellableDate ?? null,
+        status: insertItem.status ?? ITEM_STATUSES.ORDERED,
+        storageLocation: insertItem.storageLocation ?? null,
+        imageUrl: insertItem.imageUrl ?? null,
+        notes: insertItem.notes ?? null,
+      })
+      .returning();
+    return item;
+  }
+
+  async createItemsBulk(userId: string, insertItems: Omit<InsertVineItem, 'userId'>[]): Promise<VineItem[]> {
+    if (insertItems.length === 0) return [];
+    
+    const values = insertItems.map(insertItem => ({
+      id: randomUUID(),
+      userId,
       asin: insertItem.asin,
       description: insertItem.description,
       taxValue: insertItem.taxValue ?? 0,
@@ -131,80 +138,88 @@ export class MemStorage implements IStorage {
       storageLocation: insertItem.storageLocation ?? null,
       imageUrl: insertItem.imageUrl ?? null,
       notes: insertItem.notes ?? null,
-    };
-    this.items.set(id, item);
+    }));
+
+    const items = await db
+      .insert(vineItems)
+      .values(values)
+      .returning();
+    return items;
+  }
+
+  async updateItem(userId: string, id: string, updates: Partial<VineItem>): Promise<VineItem | undefined> {
+    const { id: _, userId: __, ...safeUpdates } = updates;
+    const [item] = await db
+      .update(vineItems)
+      .set(safeUpdates)
+      .where(and(eq(vineItems.id, id), eq(vineItems.userId, userId)))
+      .returning();
     return item;
   }
 
-  async createItemsBulk(insertItems: InsertVineItem[]): Promise<VineItem[]> {
-    const createdItems: VineItem[] = [];
-    for (const insertItem of insertItems) {
-      const item = await this.createItem(insertItem);
-      createdItems.push(item);
-    }
-    return createdItems;
+  async deleteItem(userId: string, id: string): Promise<boolean> {
+    const result = await db
+      .delete(vineItems)
+      .where(and(eq(vineItems.id, id), eq(vineItems.userId, userId)))
+      .returning();
+    return result.length > 0;
   }
 
-  async updateItem(id: string, updates: Partial<VineItem>): Promise<VineItem | undefined> {
-    const item = this.items.get(id);
-    if (!item) return undefined;
-
-    const updatedItem: VineItem = { ...item, ...updates, id };
-    this.items.set(id, updatedItem);
-    return updatedItem;
-  }
-
-  async deleteItem(id: string): Promise<boolean> {
-    return this.items.delete(id);
-  }
-
-  async markItemReceived(id: string): Promise<VineItem | undefined> {
-    const item = this.items.get(id);
-    if (!item) return undefined;
-
+  async markItemReceived(userId: string, id: string): Promise<VineItem | undefined> {
     const now = new Date();
-    const reviewDueDate = addDays(now, 14); // 14 days to review
-    const sellableDate = addMonths(now, 6); // 6 months until sellable
+    const reviewDueDate = addDays(now, 14);
+    const sellableDate = addMonths(now, 6);
 
-    const updatedItem: VineItem = {
-      ...item,
-      receivedDate: now,
-      reviewDueDate,
-      sellableDate,
-      status: ITEM_STATUSES.RECEIVED,
-    };
-
-    this.items.set(id, updatedItem);
-    return updatedItem;
+    const [item] = await db
+      .update(vineItems)
+      .set({
+        receivedDate: now,
+        reviewDueDate,
+        sellableDate,
+        status: ITEM_STATUSES.RECEIVED,
+      })
+      .where(and(eq(vineItems.id, id), eq(vineItems.userId, userId)))
+      .returning();
+    return item;
   }
 
   // Storage Units
-  async getAllStorageUnits(): Promise<StorageUnit[]> {
-    return Array.from(this.storageUnits.values());
+  async getAllStorageUnits(userId: string): Promise<StorageUnit[]> {
+    return await db
+      .select()
+      .from(storageUnits)
+      .where(eq(storageUnits.userId, userId));
   }
 
-  async getStorageUnitById(id: string): Promise<StorageUnit | undefined> {
-    return this.storageUnits.get(id);
+  async getStorageUnitById(userId: string, id: string): Promise<StorageUnit | undefined> {
+    const [unit] = await db
+      .select()
+      .from(storageUnits)
+      .where(and(eq(storageUnits.id, id), eq(storageUnits.userId, userId)));
+    return unit;
   }
 
-  async createStorageUnit(insertUnit: InsertStorageUnit): Promise<StorageUnit> {
+  async createStorageUnit(userId: string, insertUnit: Omit<InsertStorageUnit, 'userId'>): Promise<StorageUnit> {
     const id = randomUUID();
-    const unit: StorageUnit = {
-      id,
-      name: insertUnit.name,
-      width: insertUnit.width,
-      height: insertUnit.height,
-      depth: insertUnit.depth,
-      shelves: insertUnit.shelves ?? 1,
-      usedCapacity: insertUnit.usedCapacity ?? 0,
-    };
-    this.storageUnits.set(id, unit);
+    const [unit] = await db
+      .insert(storageUnits)
+      .values({
+        id,
+        userId,
+        name: insertUnit.name,
+        width: insertUnit.width,
+        height: insertUnit.height,
+        depth: insertUnit.depth,
+        shelves: insertUnit.shelves ?? 1,
+        usedCapacity: insertUnit.usedCapacity ?? 0,
+      })
+      .returning();
 
     // Create slots for each shelf
+    const slotValues = [];
     for (let i = 1; i <= (unit.shelves || 1); i++) {
-      const slotId = randomUUID();
-      const slot: StorageSlot = {
-        id: slotId,
+      slotValues.push({
+        id: randomUUID(),
         unitId: id,
         slotCode: `S${i}`,
         width: unit.width,
@@ -212,114 +227,114 @@ export class MemStorage implements IStorage {
         depth: unit.depth,
         isOccupied: false,
         itemId: null,
-      };
-      this.storageSlots.set(slotId, slot);
+      });
+    }
+    if (slotValues.length > 0) {
+      await db.insert(storageSlots).values(slotValues);
     }
 
     return unit;
   }
 
-  async updateStorageUnit(
-    id: string,
-    updates: Partial<StorageUnit>
-  ): Promise<StorageUnit | undefined> {
-    const unit = this.storageUnits.get(id);
-    if (!unit) return undefined;
-
-    const updatedUnit: StorageUnit = { ...unit, ...updates, id };
-    this.storageUnits.set(id, updatedUnit);
-    return updatedUnit;
+  async updateStorageUnit(userId: string, id: string, updates: Partial<StorageUnit>): Promise<StorageUnit | undefined> {
+    const { id: _, userId: __, ...safeUpdates } = updates;
+    const [unit] = await db
+      .update(storageUnits)
+      .set(safeUpdates)
+      .where(and(eq(storageUnits.id, id), eq(storageUnits.userId, userId)))
+      .returning();
+    return unit;
   }
 
-  async deleteStorageUnit(id: string): Promise<boolean> {
-    // Also delete associated slots
-    const slotsToDelete = Array.from(this.storageSlots.values())
-      .filter((slot) => slot.unitId === id)
-      .map((slot) => slot.id);
+  async deleteStorageUnit(userId: string, id: string): Promise<boolean> {
+    // First delete associated slots
+    await db
+      .delete(storageSlots)
+      .where(eq(storageSlots.unitId, id));
 
-    for (const slotId of slotsToDelete) {
-      this.storageSlots.delete(slotId);
-    }
-
-    return this.storageUnits.delete(id);
+    const result = await db
+      .delete(storageUnits)
+      .where(and(eq(storageUnits.id, id), eq(storageUnits.userId, userId)))
+      .returning();
+    return result.length > 0;
   }
 
   // Scan Logs
-  async getRecentScans(limit: number = 20): Promise<ScanLog[]> {
-    return Array.from(this.scanLogs.values())
-      .sort((a, b) => {
-        const dateA = a.scannedAt ? new Date(a.scannedAt).getTime() : 0;
-        const dateB = b.scannedAt ? new Date(b.scannedAt).getTime() : 0;
-        return dateB - dateA;
-      })
-      .slice(0, limit);
+  async getRecentScans(userId: string, limit: number = 20): Promise<ScanLog[]> {
+    return await db
+      .select()
+      .from(scanLogs)
+      .where(eq(scanLogs.userId, userId))
+      .orderBy(desc(scanLogs.scannedAt))
+      .limit(limit);
   }
 
-  async createScanLog(insertLog: InsertScanLog): Promise<ScanLog> {
+  async createScanLog(userId: string, insertLog: Omit<InsertScanLog, 'userId'>): Promise<ScanLog> {
     const id = randomUUID();
-    const log: ScanLog = {
-      id,
-      asin: insertLog.asin,
-      scannedAt: insertLog.scannedAt,
-      action: insertLog.action,
-      itemId: insertLog.itemId ?? null,
-    };
-    this.scanLogs.set(id, log);
+    const [log] = await db
+      .insert(scanLogs)
+      .values({
+        id,
+        userId,
+        asin: insertLog.asin,
+        scannedAt: insertLog.scannedAt,
+        action: insertLog.action,
+        itemId: insertLog.itemId ?? null,
+      })
+      .returning();
     return log;
   }
 
   // Upload Records
-  async getAllUploadRecords(): Promise<UploadRecord[]> {
-    return Array.from(this.uploadRecords.values()).sort((a, b) => {
-      const dateA = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
-      const dateB = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
-      return dateB - dateA;
-    });
+  async getAllUploadRecords(userId: string): Promise<UploadRecord[]> {
+    return await db
+      .select()
+      .from(uploadRecords)
+      .where(eq(uploadRecords.userId, userId))
+      .orderBy(desc(uploadRecords.uploadedAt));
   }
 
-  async createUploadRecord(insertRecord: InsertUploadRecord): Promise<UploadRecord> {
+  async createUploadRecord(userId: string, insertRecord: Omit<InsertUploadRecord, 'userId'>): Promise<UploadRecord> {
     const id = randomUUID();
-    const record: UploadRecord = {
-      id,
-      filename: insertRecord.filename,
-      uploadedAt: insertRecord.uploadedAt,
-      itemsImported: insertRecord.itemsImported ?? 0,
-      status: insertRecord.status ?? "completed",
-    };
-    this.uploadRecords.set(id, record);
+    const [record] = await db
+      .insert(uploadRecords)
+      .values({
+        id,
+        userId,
+        filename: insertRecord.filename,
+        uploadedAt: insertRecord.uploadedAt,
+        itemsImported: insertRecord.itemsImported ?? 0,
+        status: insertRecord.status ?? "completed",
+      })
+      .returning();
     return record;
   }
 
   // Dashboard
-  async getDashboardStats(): Promise<DashboardStats> {
-    const allItems = Array.from(this.items.values());
+  async getDashboardStats(userId: string): Promise<DashboardStats> {
+    const allItems = await this.getAllItems(userId);
     const now = new Date();
     const weekStart = startOfWeek(now);
     const weekEnd = endOfWeek(now);
 
-    // Items with pending reviews (received but not reviewed)
     const pendingReviews = allItems.filter(
       (item) =>
         item.status === ITEM_STATUSES.RECEIVED ||
         item.status === ITEM_STATUSES.REVIEWING
     ).length;
 
-    // Items received this week
     const receivedThisWeek = allItems.filter((item) => {
       if (!item.receivedDate) return false;
       const receivedDate = new Date(item.receivedDate);
-      return isWithinInterval(receivedDate, { start: weekStart, end: weekEnd });
+      return receivedDate >= weekStart && receivedDate <= weekEnd;
     }).length;
 
-    // Storage utilization
-    const storageUnits = Array.from(this.storageUnits.values());
+    const units = await this.getAllStorageUnits(userId);
     const storageUtilization =
-      storageUnits.length > 0
-        ? storageUnits.reduce((sum, u) => sum + (u.usedCapacity || 0), 0) /
-          storageUnits.length
+      units.length > 0
+        ? units.reduce((sum, u) => sum + (u.usedCapacity || 0), 0) / units.length
         : 0;
 
-    // Upcoming review deadlines (next 7 days)
     const upcomingDeadlines = allItems
       .filter((item) => {
         if (!item.reviewDueDate) return false;
@@ -335,8 +350,7 @@ export class MemStorage implements IStorage {
         return dateA - dateB;
       });
 
-    // Recent activity (scan logs)
-    const recentActivity = await this.getRecentScans(10);
+    const recentActivity = await this.getRecentScans(userId, 10);
 
     return {
       totalItems: allItems.length,
@@ -348,27 +362,135 @@ export class MemStorage implements IStorage {
     };
   }
 
+  // Analytics
+  async getAnalytics(userId: string): Promise<AnalyticsData> {
+    const allItems = await this.getAllItems(userId);
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+
+    // Total item value
+    const totalItemValue = allItems.reduce((sum, item) => sum + (item.taxValue || 0), 0);
+
+    // Reviews completed
+    const reviewsCompleted = allItems.filter(
+      (item) => item.status === ITEM_STATUSES.REVIEWED || item.status === ITEM_STATUSES.SELLABLE
+    ).length;
+
+    // Reviews this month
+    const reviewsThisMonth = allItems.filter((item) => {
+      if (!item.reviewCompletedDate) return false;
+      const completedDate = new Date(item.reviewCompletedDate);
+      return completedDate >= monthStart && completedDate <= monthEnd;
+    }).length;
+
+    // Average review time (in days)
+    const itemsWithReviewTime = allItems.filter(
+      (item) => item.receivedDate && item.reviewCompletedDate
+    );
+    const averageReviewTime = itemsWithReviewTime.length > 0
+      ? itemsWithReviewTime.reduce((sum, item) => {
+          const received = new Date(item.receivedDate!).getTime();
+          const completed = new Date(item.reviewCompletedDate!).getTime();
+          return sum + (completed - received) / (1000 * 60 * 60 * 24);
+        }, 0) / itemsWithReviewTime.length
+      : 0;
+
+    // Items by status
+    const statusCounts = new Map<string, number>();
+    allItems.forEach((item) => {
+      statusCounts.set(item.status, (statusCounts.get(item.status) || 0) + 1);
+    });
+    const itemsByStatus = Array.from(statusCounts.entries()).map(([status, count]) => ({
+      status,
+      count,
+    }));
+
+    // Items by month (last 6 months)
+    const itemsByMonth: { month: string; count: number; value: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = subMonths(now, i);
+      const mStart = startOfMonth(monthDate);
+      const mEnd = endOfMonth(monthDate);
+      const monthItems = allItems.filter((item) => {
+        if (!item.orderDate) return false;
+        const orderDate = new Date(item.orderDate);
+        return orderDate >= mStart && orderDate <= mEnd;
+      });
+      itemsByMonth.push({
+        month: format(monthDate, 'MMM yyyy'),
+        count: monthItems.length,
+        value: monthItems.reduce((sum, item) => sum + (item.taxValue || 0), 0),
+      });
+    }
+
+    // Review trend (last 6 months)
+    const reviewTrend: { month: string; completed: number; pending: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = subMonths(now, i);
+      const mStart = startOfMonth(monthDate);
+      const mEnd = endOfMonth(monthDate);
+      
+      const completed = allItems.filter((item) => {
+        if (!item.reviewCompletedDate) return false;
+        const completedDate = new Date(item.reviewCompletedDate);
+        return completedDate >= mStart && completedDate <= mEnd;
+      }).length;
+
+      const pending = allItems.filter((item) => {
+        if (!item.receivedDate || item.reviewCompletedDate) return false;
+        const receivedDate = new Date(item.receivedDate);
+        return receivedDate >= mStart && receivedDate <= mEnd;
+      }).length;
+
+      reviewTrend.push({
+        month: format(monthDate, 'MMM yyyy'),
+        completed,
+        pending,
+      });
+    }
+
+    return {
+      totalItemValue,
+      reviewsCompleted,
+      reviewsThisMonth,
+      averageReviewTime,
+      itemsByStatus,
+      itemsByMonth,
+      reviewTrend,
+    };
+  }
+
   // Storage Placement
   async findOptimalPlacement(
+    userId: string,
     asin: string,
     width: number,
     height: number,
     depth: number
   ): Promise<{ unit: string; slot: string; item: VineItem } | null> {
-    const item = await this.getItemByAsin(asin);
+    const item = await this.getItemByAsin(userId, asin);
     if (!item) return null;
 
-    const units = Array.from(this.storageUnits.values());
-    const slots = Array.from(this.storageSlots.values());
+    // Get only user's storage units
+    const units = await this.getAllStorageUnits(userId);
+    if (units.length === 0) return null;
 
-    // Find available slots that can fit the package
+    // Get unit IDs for this user
+    const userUnitIds = units.map(u => u.id);
+
+    // Query only slots belonging to user's units (defense in depth)
+    const userSlots = await db
+      .select()
+      .from(storageSlots)
+      .where(inArray(storageSlots.unitId, userUnitIds));
+
     for (const unit of units) {
-      const unitSlots = slots.filter(
+      const unitSlots = userSlots.filter(
         (slot) => slot.unitId === unit.id && !slot.isOccupied
       );
 
       for (const slot of unitSlots) {
-        // Check if package fits (with some tolerance)
         if (
           width <= slot.width * 0.9 &&
           height <= slot.height * 0.9 &&
@@ -383,14 +505,12 @@ export class MemStorage implements IStorage {
       }
     }
 
-    // If no exact fit, find any available slot in units that can accommodate
     for (const unit of units) {
-      const unitSlots = slots.filter(
+      const unitSlots = userSlots.filter(
         (slot) => slot.unitId === unit.id && !slot.isOccupied
       );
 
       if (unitSlots.length > 0) {
-        // Just return the first available slot
         return {
           unit: unit.name,
           slot: unitSlots[0].slotCode,
@@ -403,4 +523,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
