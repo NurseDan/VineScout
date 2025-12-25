@@ -14,14 +14,19 @@ import {
   type ApiConnection,
   type InsertApiConnection,
   type User,
+  type MarketplaceListing,
+  type InsertMarketplaceListing,
+  type MarketplaceListingWithItem,
   ITEM_STATUSES,
   API_PROVIDERS,
+  LISTING_STATUSES,
   vineItems,
   storageUnits,
   storageSlots,
   scanLogs,
   uploadRecords,
   apiConnections,
+  marketplaceListings,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -85,6 +90,15 @@ export interface IStorage {
   listStripeProducts(active?: boolean, limit?: number, offset?: number): Promise<any[]>;
   listStripeProductsWithPrices(active?: boolean, limit?: number, offset?: number): Promise<any[]>;
   getStripeSubscription(subscriptionId: string): Promise<any>;
+
+  // Marketplace Listings
+  getMarketplaceListings(userId: string): Promise<MarketplaceListingWithItem[]>;
+  getAllActiveListings(): Promise<MarketplaceListingWithItem[]>;
+  getListingById(userId: string, listingId: string): Promise<MarketplaceListing | undefined>;
+  createListing(userId: string, data: Omit<InsertMarketplaceListing, 'userId'>): Promise<MarketplaceListing>;
+  updateListing(userId: string, listingId: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
+  deleteListing(userId: string, listingId: string): Promise<boolean>;
+  markListingAsSold(userId: string, listingId: string): Promise<MarketplaceListing | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -707,6 +721,103 @@ export class DatabaseStorage implements IStorage {
       sql`SELECT * FROM stripe.subscriptions WHERE id = ${subscriptionId}`
     );
     return result.rows[0] || null;
+  }
+
+  // Marketplace Listings
+  async getMarketplaceListings(userId: string): Promise<MarketplaceListingWithItem[]> {
+    const listings = await db
+      .select()
+      .from(marketplaceListings)
+      .where(eq(marketplaceListings.userId, userId))
+      .orderBy(desc(marketplaceListings.createdAt));
+
+    const result: MarketplaceListingWithItem[] = [];
+    for (const listing of listings) {
+      const [item] = await db
+        .select()
+        .from(vineItems)
+        .where(eq(vineItems.id, listing.itemId));
+      if (item) {
+        result.push({ ...listing, item });
+      }
+    }
+    return result;
+  }
+
+  async getAllActiveListings(): Promise<MarketplaceListingWithItem[]> {
+    const listings = await db
+      .select()
+      .from(marketplaceListings)
+      .where(eq(marketplaceListings.status, LISTING_STATUSES.ACTIVE))
+      .orderBy(desc(marketplaceListings.createdAt));
+
+    const result: MarketplaceListingWithItem[] = [];
+    for (const listing of listings) {
+      const [item] = await db
+        .select()
+        .from(vineItems)
+        .where(eq(vineItems.id, listing.itemId));
+      if (item) {
+        result.push({ ...listing, item });
+      }
+    }
+    return result;
+  }
+
+  async getListingById(userId: string, listingId: string): Promise<MarketplaceListing | undefined> {
+    const [listing] = await db
+      .select()
+      .from(marketplaceListings)
+      .where(and(eq(marketplaceListings.id, listingId), eq(marketplaceListings.userId, userId)));
+    return listing;
+  }
+
+  async createListing(userId: string, data: Omit<InsertMarketplaceListing, 'userId'>): Promise<MarketplaceListing> {
+    const id = randomUUID();
+    const [listing] = await db
+      .insert(marketplaceListings)
+      .values({
+        id,
+        userId,
+        itemId: data.itemId,
+        askingPrice: data.askingPrice,
+        description: data.description ?? null,
+        condition: data.condition ?? "new",
+        status: data.status ?? LISTING_STATUSES.ACTIVE,
+        soldAt: data.soldAt ?? null,
+      })
+      .returning();
+    return listing;
+  }
+
+  async updateListing(userId: string, listingId: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined> {
+    const { id: _, userId: __, ...safeUpdates } = updates;
+    const [listing] = await db
+      .update(marketplaceListings)
+      .set(safeUpdates)
+      .where(and(eq(marketplaceListings.id, listingId), eq(marketplaceListings.userId, userId)))
+      .returning();
+    return listing;
+  }
+
+  async deleteListing(userId: string, listingId: string): Promise<boolean> {
+    const result = await db
+      .delete(marketplaceListings)
+      .where(and(eq(marketplaceListings.id, listingId), eq(marketplaceListings.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async markListingAsSold(userId: string, listingId: string): Promise<MarketplaceListing | undefined> {
+    const [listing] = await db
+      .update(marketplaceListings)
+      .set({
+        status: LISTING_STATUSES.SOLD,
+        soldAt: new Date(),
+      })
+      .where(and(eq(marketplaceListings.id, listingId), eq(marketplaceListings.userId, userId)))
+      .returning();
+    return listing;
   }
 }
 

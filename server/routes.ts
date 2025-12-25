@@ -1,7 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertVineItemSchema, insertStorageUnitSchema, insertApiConnectionSchema, ITEM_STATUSES } from "@shared/schema";
+import { insertVineItemSchema, insertStorageUnitSchema, insertApiConnectionSchema, insertMarketplaceListingSchema, ITEM_STATUSES, LISTING_STATUSES } from "@shared/schema";
+import { subMonths } from "date-fns";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { stripeService } from "./stripeService";
@@ -762,6 +763,104 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error predicting sell price:", error);
       res.status(500).json({ error: "Failed to predict sell price" });
+    }
+  });
+
+  // Marketplace Routes
+  app.get("/api/marketplace", async (req, res) => {
+    try {
+      const listings = await storage.getAllActiveListings();
+      res.json(listings);
+    } catch (error) {
+      console.error("Error fetching marketplace listings:", error);
+      res.status(500).json({ error: "Failed to fetch marketplace listings" });
+    }
+  });
+
+  app.get("/api/marketplace/my-listings", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const listings = await storage.getMarketplaceListings(userId);
+      res.json(listings);
+    } catch (error) {
+      console.error("Error fetching user listings:", error);
+      res.status(500).json({ error: "Failed to fetch your listings" });
+    }
+  });
+
+  app.post("/api/marketplace", isAuthenticated, requirePremium, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const validatedData = insertMarketplaceListingSchema.omit({ userId: true }).parse(req.body);
+      
+      const item = await storage.getItemById(userId, validatedData.itemId);
+      if (!item) {
+        return res.status(404).json({ error: "Item not found" });
+      }
+
+      const sixMonthsAgo = subMonths(new Date(), 6);
+      const itemOrderDate = item.orderDate ? new Date(item.orderDate) : new Date();
+      const isOldEnough = itemOrderDate <= sixMonthsAgo;
+      const isSellable = item.status === ITEM_STATUSES.SELLABLE;
+
+      if (!isOldEnough && !isSellable) {
+        return res.status(400).json({ 
+          error: "Item not eligible for listing",
+          message: "Only items with 'sellable' status or items older than 6 months can be listed"
+        });
+      }
+
+      const listing = await storage.createListing(userId, validatedData);
+      res.status(201).json(listing);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid listing data", details: error.errors });
+      }
+      console.error("Error creating listing:", error);
+      res.status(500).json({ error: "Failed to create listing" });
+    }
+  });
+
+  app.patch("/api/marketplace/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const updates = req.body;
+      const listing = await storage.updateListing(userId, req.params.id, updates);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      res.json(listing);
+    } catch (error) {
+      console.error("Error updating listing:", error);
+      res.status(500).json({ error: "Failed to update listing" });
+    }
+  });
+
+  app.delete("/api/marketplace/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const deleted = await storage.deleteListing(userId, req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting listing:", error);
+      res.status(500).json({ error: "Failed to delete listing" });
+    }
+  });
+
+  app.post("/api/marketplace/:id/sold", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const listing = await storage.markListingAsSold(userId, req.params.id);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      res.json(listing);
+    } catch (error) {
+      console.error("Error marking listing as sold:", error);
+      res.status(500).json({ error: "Failed to mark listing as sold" });
     }
   });
 

@@ -10,6 +10,7 @@ import {
   Link2,
   CreditCard,
   Brain,
+  ShoppingBag,
 } from "lucide-react";
 import {
   Sidebar,
@@ -64,6 +65,11 @@ const menuItems = [
     title: "Connections",
     url: "/connections",
     icon: Link2,
+  },
+  {
+    title: "Marketplace",
+    url: "/marketplace",
+    icon: ShoppingBag,
   },
   {
     title: "AI Assistant",

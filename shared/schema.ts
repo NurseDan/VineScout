@@ -182,3 +182,37 @@ export const API_PROVIDERS = {
 } as const;
 
 export type ApiProvider = typeof API_PROVIDERS[keyof typeof API_PROVIDERS];
+
+// Marketplace Listings - For selling aged inventory items
+export const marketplaceListings = pgTable("marketplace_listings", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  itemId: varchar("item_id", { length: 36 }).notNull(),
+  askingPrice: real("asking_price").notNull(),
+  description: text("description"),
+  condition: varchar("condition", { length: 20 }).notNull().default("new"),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  soldAt: timestamp("sold_at"),
+}, (table) => [
+  index("marketplace_listings_user_id_idx").on(table.userId),
+  index("marketplace_listings_status_idx").on(table.status),
+]);
+
+export const insertMarketplaceListingSchema = createInsertSchema(marketplaceListings).omit({ id: true, createdAt: true });
+export type InsertMarketplaceListing = z.infer<typeof insertMarketplaceListingSchema>;
+export type MarketplaceListing = typeof marketplaceListings.$inferSelect;
+
+// Marketplace listing statuses
+export const LISTING_STATUSES = {
+  ACTIVE: "active",
+  SOLD: "sold",
+  CANCELLED: "cancelled",
+} as const;
+
+export type ListingStatus = typeof LISTING_STATUSES[keyof typeof LISTING_STATUSES];
+
+// Extended marketplace listing type with item details
+export type MarketplaceListingWithItem = MarketplaceListing & {
+  item: VineItem;
+};

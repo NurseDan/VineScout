@@ -32,6 +32,7 @@ import ConnectionsPage from "@/pages/connections";
 import LandingPage from "@/pages/landing";
 import MembershipPage from "@/pages/membership";
 import AIAssistantPage from "@/pages/ai-assistant";
+import MarketplacePage from "@/pages/marketplace";
 
 function Router() {
   return (
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/connections" component={ConnectionsPage} />
       <Route path="/ai-assistant" component={AIAssistantPage} />
+      <Route path="/marketplace" component={MarketplacePage} />
       <Route path="/membership" component={MembershipPage} />
       <Route component={NotFound} />
     </Switch>
