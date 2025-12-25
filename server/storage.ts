@@ -13,6 +13,7 @@ import {
   type AnalyticsData,
   type ApiConnection,
   type InsertApiConnection,
+  type User,
   ITEM_STATUSES,
   API_PROVIDERS,
   vineItems,
@@ -21,6 +22,7 @@ import {
   scanLogs,
   uploadRecords,
   apiConnections,
+  users,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, count, inArray } from "drizzle-orm";
@@ -75,6 +77,14 @@ export interface IStorage {
   updateApiConnection(userId: string, id: string, updates: Partial<ApiConnection>): Promise<ApiConnection | undefined>;
   deleteApiConnection(userId: string, id: string): Promise<boolean>;
   testApiConnection(userId: string, id: string): Promise<{ success: boolean; message: string }>;
+
+  // Stripe / User methods
+  getUser(userId: string): Promise<User | undefined>;
+  updateUserStripeInfo(userId: string, stripeInfo: { stripeCustomerId?: string; stripeSubscriptionId?: string }): Promise<User | undefined>;
+  getStripeProduct(productId: string): Promise<any>;
+  listStripeProducts(active?: boolean, limit?: number, offset?: number): Promise<any[]>;
+  listStripeProductsWithPrices(active?: boolean, limit?: number, offset?: number): Promise<any[]>;
+  getStripeSubscription(subscriptionId: string): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -635,6 +645,68 @@ export class DatabaseStorage implements IStorage {
       console.error("Error testing API connection:", error);
       return { success: false, message: "Failed to test connection. Please try again." };
     }
+  }
+
+  // Stripe / User methods
+  async getUser(userId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user;
+  }
+
+  async updateUserStripeInfo(userId: string, stripeInfo: { stripeCustomerId?: string; stripeSubscriptionId?: string }): Promise<User | undefined> {
+    const [user] = await db.update(users).set(stripeInfo).where(eq(users.id, userId)).returning();
+    return user;
+  }
+
+  async getStripeProduct(productId: string): Promise<any> {
+    const result = await db.execute(
+      sql`SELECT * FROM stripe.products WHERE id = ${productId}`
+    );
+    return result.rows[0] || null;
+  }
+
+  async listStripeProducts(active = true, limit = 20, offset = 0): Promise<any[]> {
+    const result = await db.execute(
+      sql`SELECT * FROM stripe.products WHERE active = ${active} LIMIT ${limit} OFFSET ${offset}`
+    );
+    return result.rows;
+  }
+
+  async listStripeProductsWithPrices(active = true, limit = 20, offset = 0): Promise<any[]> {
+    const result = await db.execute(
+      sql`
+        WITH paginated_products AS (
+          SELECT id, name, description, metadata, active
+          FROM stripe.products
+          WHERE active = ${active}
+          ORDER BY id
+          LIMIT ${limit} OFFSET ${offset}
+        )
+        SELECT 
+          p.id as product_id,
+          p.name as product_name,
+          p.description as product_description,
+          p.active as product_active,
+          p.metadata as product_metadata,
+          pr.id as price_id,
+          pr.unit_amount,
+          pr.currency,
+          pr.recurring,
+          pr.active as price_active,
+          pr.metadata as price_metadata
+        FROM paginated_products p
+        LEFT JOIN stripe.prices pr ON pr.product = p.id AND pr.active = true
+        ORDER BY p.id, pr.unit_amount
+      `
+    );
+    return result.rows;
+  }
+
+  async getStripeSubscription(subscriptionId: string): Promise<any> {
+    const result = await db.execute(
+      sql`SELECT * FROM stripe.subscriptions WHERE id = ${subscriptionId}`
+    );
+    return result.rows[0] || null;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   Tag,
   BarChart3,
   Link2,
+  CreditCard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -62,6 +63,11 @@ const menuItems = [
     title: "Connections",
     url: "/connections",
     icon: Link2,
+  },
+  {
+    title: "Membership",
+    url: "/membership",
+    icon: CreditCard,
   },
 ];
 

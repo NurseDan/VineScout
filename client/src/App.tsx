@@ -30,6 +30,7 @@ import LabelsPage from "@/pages/labels";
 import AnalyticsPage from "@/pages/analytics";
 import ConnectionsPage from "@/pages/connections";
 import LandingPage from "@/pages/landing";
+import MembershipPage from "@/pages/membership";
 
 function Router() {
   return (
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/labels" component={LabelsPage} />
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/connections" component={ConnectionsPage} />
+      <Route path="/membership" component={MembershipPage} />
       <Route component={NotFound} />
     </Switch>
   );
