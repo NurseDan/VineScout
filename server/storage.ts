@@ -20,6 +20,10 @@ import {
   type MarketplaceListing,
   type InsertMarketplaceListing,
   type MarketplaceListingWithItem,
+  type TaxProfile,
+  type InsertTaxProfile,
+  type TaxSummary,
+  type QuarterlyTaxEstimate,
   ITEM_STATUSES,
   API_PROVIDERS,
   LISTING_STATUSES,
@@ -32,6 +36,7 @@ import {
   uploadRecords,
   apiConnections,
   marketplaceListings,
+  taxProfiles,
   users,
 } from "@shared/schema";
 import { db } from "./db";
@@ -117,6 +122,11 @@ export interface IStorage {
   getAllUsersAdmin(): Promise<AdminUserInfo[]>;
   getUserByIdAdmin(userId: string): Promise<AdminUserDetail | undefined>;
   updateUserAdmin(userId: string, updates: Partial<User>): Promise<User | undefined>;
+
+  // Tax Profiles
+  getTaxProfile(userId: string): Promise<TaxProfile | undefined>;
+  createOrUpdateTaxProfile(userId: string, data: Omit<InsertTaxProfile, 'userId'>): Promise<TaxProfile>;
+  getTaxSummary(userId: string): Promise<TaxSummary>;
 }
 
 // Admin types
@@ -1016,6 +1026,112 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  // Tax Profile Methods
+  async getTaxProfile(userId: string): Promise<TaxProfile | undefined> {
+    const [profile] = await db
+      .select()
+      .from(taxProfiles)
+      .where(eq(taxProfiles.userId, userId));
+    return profile;
+  }
+
+  async createOrUpdateTaxProfile(userId: string, data: Omit<InsertTaxProfile, 'userId'>): Promise<TaxProfile> {
+    const existing = await this.getTaxProfile(userId);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(taxProfiles)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(taxProfiles.userId, userId))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db
+      .insert(taxProfiles)
+      .values({
+        id: randomUUID(),
+        userId,
+        ...data,
+      })
+      .returning();
+    return created;
+  }
+
+  async getTaxSummary(userId: string): Promise<TaxSummary> {
+    const profile = await this.getTaxProfile(userId);
+    const items = await this.getAllItems(userId);
+    
+    const federalRate = (profile?.estimatedTaxRate || 25) / 100;
+    const seRate = (profile?.selfEmploymentTaxRate || 15.3) / 100;
+    const stateRate = profile?.includeStateTax ? (profile?.stateTaxRate || 5) / 100 : 0;
+    
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    
+    // IRS quarterly payment due dates
+    const quarterDueDates = [
+      { quarter: 1, dueDate: new Date(currentYear, 3, 15), startMonth: 0, endMonth: 2 },
+      { quarter: 2, dueDate: new Date(currentYear, 5, 15), startMonth: 3, endMonth: 5 },
+      { quarter: 3, dueDate: new Date(currentYear, 8, 15), startMonth: 6, endMonth: 8 },
+      { quarter: 4, dueDate: new Date(currentYear + 1, 0, 15), startMonth: 9, endMonth: 11 },
+    ];
+    
+    // Calculate year-to-date totals
+    const ytdItems = items.filter(item => {
+      if (!item.receivedDate) return false;
+      const receivedDate = new Date(item.receivedDate);
+      return receivedDate.getFullYear() === currentYear;
+    });
+    
+    const ytdIncome = ytdItems.reduce((sum, item) => sum + (item.taxValue || 0), 0);
+    const ytdFederalTax = ytdIncome * federalRate;
+    const ytdSeTax = ytdIncome * seRate;
+    const ytdStateTax = ytdIncome * stateRate;
+    
+    // Calculate quarterly estimates
+    const quarters: QuarterlyTaxEstimate[] = quarterDueDates.map(qtr => {
+      const quarterItems = ytdItems.filter(item => {
+        const month = new Date(item.receivedDate!).getMonth();
+        return month >= qtr.startMonth && month <= qtr.endMonth;
+      });
+      
+      const income = quarterItems.reduce((sum, item) => sum + (item.taxValue || 0), 0);
+      const fedTax = income * federalRate;
+      const seTax = income * seRate;
+      const stateTax = income * stateRate;
+      
+      return {
+        quarter: qtr.quarter,
+        year: currentYear,
+        dueDate: format(qtr.dueDate, "MMMM d, yyyy"),
+        totalIncome: income,
+        federalTax: fedTax,
+        selfEmploymentTax: seTax,
+        stateTax: stateTax,
+        totalTax: fedTax + seTax + stateTax,
+        itemCount: quarterItems.length,
+        isPaid: qtr.dueDate < now,
+      };
+    });
+    
+    // Find next payment due
+    const nextPayment = quarters.find(q => !q.isPaid) || null;
+    
+    return {
+      yearToDate: {
+        totalIncome: ytdIncome,
+        federalTax: ytdFederalTax,
+        selfEmploymentTax: ytdSeTax,
+        stateTax: ytdStateTax,
+        totalTax: ytdFederalTax + ytdSeTax + ytdStateTax,
+        itemCount: ytdItems.length,
+      },
+      quarters,
+      nextPaymentDue: nextPayment,
+    };
   }
 }
 

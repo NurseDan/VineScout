@@ -262,3 +262,65 @@ export type ListingStatus = typeof LISTING_STATUSES[keyof typeof LISTING_STATUSE
 export type MarketplaceListingWithItem = MarketplaceListing & {
   item: VineItem;
 };
+
+// Tax Profiles - User tax settings for quarterly payments
+export const taxProfiles = pgTable("tax_profiles", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull().unique(),
+  filingStatus: varchar("filing_status", { length: 30 }).notNull().default("single"),
+  state: varchar("state", { length: 2 }),
+  estimatedTaxRate: real("estimated_tax_rate").default(25),
+  selfEmploymentTaxRate: real("self_employment_tax_rate").default(15.3),
+  includeStateTax: boolean("include_state_tax").default(false),
+  stateTaxRate: real("state_tax_rate").default(5),
+  reminderEnabled: boolean("reminder_enabled").default(true),
+  businessName: varchar("business_name", { length: 200 }),
+  businessAddress: text("business_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("tax_profiles_user_id_idx").on(table.userId),
+]);
+
+export const insertTaxProfileSchema = createInsertSchema(taxProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTaxProfile = z.infer<typeof insertTaxProfileSchema>;
+export type TaxProfile = typeof taxProfiles.$inferSelect;
+
+// Filing status options
+export const FILING_STATUSES = {
+  SINGLE: "single",
+  MARRIED_JOINT: "married_joint",
+  MARRIED_SEPARATE: "married_separate",
+  HEAD_OF_HOUSEHOLD: "head_of_household",
+  QUALIFYING_WIDOW: "qualifying_widow",
+} as const;
+
+export type FilingStatus = typeof FILING_STATUSES[keyof typeof FILING_STATUSES];
+
+// Quarterly tax estimate type
+export type QuarterlyTaxEstimate = {
+  quarter: number;
+  year: number;
+  dueDate: string;
+  totalIncome: number;
+  federalTax: number;
+  selfEmploymentTax: number;
+  stateTax: number;
+  totalTax: number;
+  itemCount: number;
+  isPaid: boolean;
+};
+
+// Tax summary type
+export type TaxSummary = {
+  yearToDate: {
+    totalIncome: number;
+    federalTax: number;
+    selfEmploymentTax: number;
+    stateTax: number;
+    totalTax: number;
+    itemCount: number;
+  };
+  quarters: QuarterlyTaxEstimate[];
+  nextPaymentDue: QuarterlyTaxEstimate | null;
+};

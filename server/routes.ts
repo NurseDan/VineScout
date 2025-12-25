@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertVineItemSchema, insertStorageUnitSchema, insertStorageLocationSchema, insertApiConnectionSchema, insertMarketplaceListingSchema, ITEM_STATUSES, LISTING_STATUSES, LOCATION_TYPES } from "@shared/schema";
+import { insertVineItemSchema, insertStorageUnitSchema, insertStorageLocationSchema, insertApiConnectionSchema, insertMarketplaceListingSchema, insertTaxProfileSchema, ITEM_STATUSES, LISTING_STATUSES, LOCATION_TYPES } from "@shared/schema";
 import { subMonths } from "date-fns";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -1007,6 +1007,106 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // Tax Routes
+  app.get("/api/tax/profile", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const profile = await storage.getTaxProfile(userId);
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Error fetching tax profile:", error);
+      res.status(500).json({ error: "Failed to fetch tax profile" });
+    }
+  });
+
+  app.post("/api/tax/profile", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const parsed = insertTaxProfileSchema.omit({ userId: true }).parse(req.body);
+      const profile = await storage.createOrUpdateTaxProfile(userId, parsed);
+      res.json(profile);
+    } catch (error) {
+      console.error("Error saving tax profile:", error);
+      res.status(500).json({ error: "Failed to save tax profile" });
+    }
+  });
+
+  app.get("/api/tax/summary", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const summary = await storage.getTaxSummary(userId);
+      res.json(summary);
+    } catch (error) {
+      console.error("Error fetching tax summary:", error);
+      res.status(500).json({ error: "Failed to fetch tax summary" });
+    }
+  });
+
+  app.get("/api/tax/export", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { format = 'csv', quarter, year } = req.query;
+      const summary = await storage.getTaxSummary(userId);
+      const profile = await storage.getTaxProfile(userId);
+      
+      const currentYear = new Date().getFullYear();
+      const targetYear = parseInt(year as string) || currentYear;
+      const targetQuarter = quarter ? parseInt(quarter as string) : null;
+      
+      const quarterData = targetQuarter 
+        ? summary.quarters.find(q => q.quarter === targetQuarter && q.year === targetYear)
+        : null;
+      
+      if (format === 'json') {
+        res.json({
+          profile,
+          summary: targetQuarter ? quarterData : summary,
+          exportDate: new Date().toISOString(),
+        });
+        return;
+      }
+      
+      // CSV format
+      const lines = [
+        `Tax Report - ${targetQuarter ? `Q${targetQuarter} ` : ''}${targetYear}`,
+        `Generated: ${new Date().toLocaleDateString()}`,
+        '',
+        'Year-to-Date Summary',
+        `Total Vine Income,$${summary.yearToDate.totalIncome.toFixed(2)}`,
+        `Estimated Federal Tax,$${summary.yearToDate.federalTax.toFixed(2)}`,
+        `Estimated Self-Employment Tax,$${summary.yearToDate.selfEmploymentTax.toFixed(2)}`,
+        `Estimated State Tax,$${summary.yearToDate.stateTax.toFixed(2)}`,
+        `Total Estimated Tax,$${summary.yearToDate.totalTax.toFixed(2)}`,
+        `Total Items Received,${summary.yearToDate.itemCount}`,
+        '',
+        'Quarterly Breakdown',
+        'Quarter,Due Date,Income,Federal Tax,SE Tax,State Tax,Total Tax,Items',
+      ];
+      
+      summary.quarters.forEach(q => {
+        lines.push(`Q${q.quarter} ${q.year},${q.dueDate},$${q.totalIncome.toFixed(2)},$${q.federalTax.toFixed(2)},$${q.selfEmploymentTax.toFixed(2)},$${q.stateTax.toFixed(2)},$${q.totalTax.toFixed(2)},${q.itemCount}`);
+      });
+      
+      if (profile) {
+        lines.push('', 'Tax Profile Settings');
+        lines.push(`Filing Status,${profile.filingStatus}`);
+        lines.push(`Federal Tax Rate,${profile.estimatedTaxRate}%`);
+        lines.push(`Self-Employment Tax Rate,${profile.selfEmploymentTaxRate}%`);
+        if (profile.includeStateTax) {
+          lines.push(`State,${profile.state || 'Not specified'}`);
+          lines.push(`State Tax Rate,${profile.stateTaxRate}%`);
+        }
+      }
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=tax-report-${targetYear}${targetQuarter ? `-q${targetQuarter}` : ''}.csv`);
+      res.send(lines.join('\n'));
+    } catch (error) {
+      console.error("Error exporting tax data:", error);
+      res.status(500).json({ error: "Failed to export tax data" });
     }
   });
 
