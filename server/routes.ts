@@ -564,6 +564,31 @@ export async function registerRoutes(
     }
   });
 
+  // Find items that fit in a bin
+  app.post("/api/storage/find-fitting-items", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { lengthIn, widthIn, heightIn, maxWeightLb } = req.body;
+
+      if (!lengthIn || !widthIn || !heightIn) {
+        return res.status(400).json({ error: "Bin dimensions (length, width, height) are required" });
+      }
+
+      const items = await storage.findFittingItems(
+        userId,
+        parseFloat(lengthIn),
+        parseFloat(widthIn),
+        parseFloat(heightIn),
+        maxWeightLb ? parseFloat(maxWeightLb) : undefined
+      );
+
+      res.json({ items, count: items.length });
+    } catch (error) {
+      console.error("Error finding fitting items:", error);
+      res.status(500).json({ error: "Failed to find fitting items" });
+    }
+  });
+
   // API Connections CRUD
   app.get("/api/connections", isAuthenticated, async (req, res) => {
     try {

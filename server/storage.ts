@@ -127,6 +127,15 @@ export interface IStorage {
   getTaxProfile(userId: string): Promise<TaxProfile | undefined>;
   createOrUpdateTaxProfile(userId: string, data: Omit<InsertTaxProfile, 'userId'>): Promise<TaxProfile>;
   getTaxSummary(userId: string): Promise<TaxSummary>;
+
+  // Storage Matching
+  findFittingItems(
+    userId: string,
+    binLengthIn: number,
+    binWidthIn: number,
+    binHeightIn: number,
+    maxWeightLb?: number
+  ): Promise<VineItem[]>;
 }
 
 // Admin types
@@ -1140,6 +1149,60 @@ export class DatabaseStorage implements IStorage {
       quarters,
       nextPaymentDue: nextPayment,
     };
+  }
+
+  async findFittingItems(
+    userId: string,
+    binLengthIn: number,
+    binWidthIn: number,
+    binHeightIn: number,
+    maxWeightLb?: number
+  ): Promise<VineItem[]> {
+    // Get all items with dimensions
+    const allItems = await db
+      .select()
+      .from(vineItems)
+      .where(eq(vineItems.userId, userId));
+
+    // Filter items that have dimensions set
+    const itemsWithDimensions = allItems.filter(
+      item => item.lengthIn && item.widthIn && item.heightIn
+    );
+
+    // Check if item fits in bin (considering all rotations)
+    const fitsInBin = (item: VineItem): boolean => {
+      const l = item.lengthIn!;
+      const w = item.widthIn!;
+      const h = item.heightIn!;
+      
+      // All 6 possible orientations (permutations of L, W, H)
+      const orientations = [
+        [l, w, h],
+        [l, h, w],
+        [w, l, h],
+        [w, h, l],
+        [h, l, w],
+        [h, w, l],
+      ];
+
+      // Check if any orientation fits
+      for (const [itemL, itemW, itemH] of orientations) {
+        if (itemL <= binLengthIn && itemW <= binWidthIn && itemH <= binHeightIn) {
+          // Check weight constraint if provided
+          if (maxWeightLb !== undefined && item.weightLb) {
+            if (item.weightLb <= maxWeightLb) {
+              return true;
+            }
+          } else {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Filter and return matching items
+    return itemsWithDimensions.filter(fitsInBin);
   }
 }
 
