@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertVineItemSchema, insertStorageUnitSchema, insertApiConnectionSchema, insertMarketplaceListingSchema, ITEM_STATUSES, LISTING_STATUSES } from "@shared/schema";
+import { insertVineItemSchema, insertStorageUnitSchema, insertStorageLocationSchema, insertApiConnectionSchema, insertMarketplaceListingSchema, ITEM_STATUSES, LISTING_STATUSES, LOCATION_TYPES } from "@shared/schema";
 import { subMonths } from "date-fns";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -407,6 +407,76 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching upload records:", error);
       res.status(500).json({ error: "Failed to fetch upload records" });
+    }
+  });
+
+  // Storage Locations CRUD
+  app.get("/api/storage/locations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const locations = await storage.getAllStorageLocations(userId);
+      res.json(locations);
+    } catch (error) {
+      console.error("Error fetching storage locations:", error);
+      res.status(500).json({ error: "Failed to fetch storage locations" });
+    }
+  });
+
+  app.get("/api/storage/locations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const location = await storage.getStorageLocationById(userId, req.params.id);
+      if (!location) {
+        return res.status(404).json({ error: "Storage location not found" });
+      }
+      res.json(location);
+    } catch (error) {
+      console.error("Error fetching storage location:", error);
+      res.status(500).json({ error: "Failed to fetch storage location" });
+    }
+  });
+
+  app.post("/api/storage/locations", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const validatedData = insertStorageLocationSchema.omit({ userId: true }).parse(req.body);
+      const location = await storage.createStorageLocation(userId, validatedData);
+      res.status(201).json(location);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid storage location data", details: error.errors });
+      }
+      console.error("Error creating storage location:", error);
+      res.status(500).json({ error: "Failed to create storage location" });
+    }
+  });
+
+  app.patch("/api/storage/locations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const updates = req.body;
+      const location = await storage.updateStorageLocation(userId, req.params.id, updates);
+      if (!location) {
+        return res.status(404).json({ error: "Storage location not found" });
+      }
+      res.json(location);
+    } catch (error) {
+      console.error("Error updating storage location:", error);
+      res.status(500).json({ error: "Failed to update storage location" });
+    }
+  });
+
+  app.delete("/api/storage/locations/:id", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const deleted = await storage.deleteStorageLocation(userId, req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Storage location not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting storage location:", error);
+      res.status(500).json({ error: "Failed to delete storage location" });
     }
   });
 
