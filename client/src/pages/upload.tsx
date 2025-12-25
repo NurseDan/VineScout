@@ -16,6 +16,8 @@ import {
   AlertCircle,
   Clock,
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import * as pdfjsLib from "pdfjs-dist";
 import {
   Table,
   TableBody,
@@ -169,12 +171,119 @@ export default function UploadPage() {
     return result;
   };
 
+  const parseExcel = useCallback((file: File): Promise<ParsedItem[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result as ArrayBuffer;
+          const workbook = XLSX.read(data, { type: "array" });
+          const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { header: 1 });
+
+          if (rows.length < 2) {
+            resolve([]);
+            return;
+          }
+
+          // Find header row (may have title row first)
+          let headerRowIdx = 0;
+          const headerLine = (rows[0] as any[]).join(" ").toLowerCase();
+          if (!headerLine.includes("asin") && rows.length > 1) {
+            headerRowIdx = 1;
+          }
+
+          const headers = (rows[headerRowIdx] as any[])
+            .map((h) => (h ? String(h).toLowerCase().trim() : ""));
+
+          const asinIdx = headers.findIndex((h) => h === "asin" || h.includes("asin"));
+          const descIdx = headers.findIndex((h) =>
+            h === "product name" || h === "product" || h.includes("name") ||
+            h.includes("description") || h.includes("title")
+          );
+          const taxIdx = headers.findIndex((h) =>
+            h === "estimated tax value" || h.includes("tax value") ||
+            h.includes("etv") || h.includes("value") || h.includes("price")
+          );
+          const dateIdx = headers.findIndex((h) =>
+            h === "order date" || h === "ordered" ||
+            (h.includes("order") && h.includes("date"))
+          );
+
+          const items: ParsedItem[] = [];
+
+          for (let i = headerRowIdx + 1; i < rows.length; i++) {
+            const row = rows[i] as any[];
+            if (!row || row.length === 0) continue;
+
+            const asin = asinIdx >= 0 ? String(row[asinIdx] || "").trim() : "";
+            const description = descIdx >= 0 ? String(row[descIdx] || "").trim() : "";
+            const taxStr = taxIdx >= 0 ? String(row[taxIdx] || "0").replace(/[^0-9.]/g, "") : "0";
+            const dateStr = dateIdx >= 0 ? String(row[dateIdx] || "").trim() : null;
+
+            const taxValue = parseFloat(taxStr) || 0;
+            const isValid = asin.length > 0 && description.length > 0;
+
+            items.push({
+              asin,
+              description,
+              taxValue,
+              orderDate: dateStr,
+              isValid,
+              error: !isValid ? "Missing ASIN or description" : undefined,
+            });
+          }
+
+          resolve(items);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }, []);
+
+  const parsePDF = useCallback((file: File): Promise<ParsedItem[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = e.target?.result as ArrayBuffer;
+          
+          // Set up PDF.js worker
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+          
+          const pdf = await pdfjsLib.getDocument({ data }).promise;
+          let fullText = "";
+
+          // Extract text from all pages
+          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            fullText += textContent.items.map((item: any) => item.str).join(" ") + "\n";
+          }
+
+          // Parse as CSV since PDFs often contain tabular data in text form
+          const items = parseCSV(fullText);
+          resolve(items);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }, [parseCSV]);
+
   const handleFile = useCallback(
-    (file: File) => {
-      if (!file.name.endsWith(".csv")) {
+    async (file: File) => {
+      const isCSV = file.name.endsWith(".csv");
+      const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls");
+      const isPDF = file.name.endsWith(".pdf");
+
+      if (!isCSV && !isExcel && !isPDF) {
         toast({
           title: "Invalid file type",
-          description: "Please upload a CSV file",
+          description: "Please upload a CSV, Excel (.xlsx, .xls), or PDF file",
           variant: "destructive",
         });
         return;
@@ -182,23 +291,54 @@ export default function UploadPage() {
 
       setFileName(file.name);
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        const items = parseCSV(content);
-        setParsedItems(items);
+      try {
+        let items: ParsedItem[] = [];
 
-        if (items.length === 0) {
-          toast({
-            title: "No items found",
-            description: "The CSV file appears to be empty or incorrectly formatted",
-            variant: "destructive",
-          });
+        if (isCSV) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const content = e.target?.result as string;
+            const parsed = parseCSV(content);
+            setParsedItems(parsed);
+            if (parsed.length === 0) {
+              toast({
+                title: "No items found",
+                description: "The file appears to be empty or incorrectly formatted",
+                variant: "destructive",
+              });
+            }
+          };
+          reader.readAsText(file);
+        } else if (isExcel) {
+          items = await parseExcel(file);
+          setParsedItems(items);
+          if (items.length === 0) {
+            toast({
+              title: "No items found",
+              description: "The Excel file appears to be empty or incorrectly formatted",
+              variant: "destructive",
+            });
+          }
+        } else if (isPDF) {
+          items = await parsePDF(file);
+          setParsedItems(items);
+          if (items.length === 0) {
+            toast({
+              title: "No items found",
+              description: "The PDF file appears to be empty or incorrectly formatted",
+              variant: "destructive",
+            });
+          }
         }
-      };
-      reader.readAsText(file);
+      } catch (error) {
+        toast({
+          title: "File parsing error",
+          description: `Failed to parse file: ${error instanceof Error ? error.message : "Unknown error"}`,
+          variant: "destructive",
+        });
+      }
     },
-    [parseCSV, toast]
+    [parseCSV, parseExcel, parsePDF, toast]
   );
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -248,9 +388,9 @@ export default function UploadPage() {
       {/* Upload Zone */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg font-medium">Upload CSV File</CardTitle>
+          <CardTitle className="text-lg font-medium">Upload Inventory File</CardTitle>
           <CardDescription>
-            Drag and drop or click to select your Amazon Vine order export
+            Drag and drop or click to select your Amazon Vine order export (CSV, Excel, or PDF)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -270,7 +410,7 @@ export default function UploadPage() {
             <input
               id="file-input"
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls,.pdf"
               onChange={handleFileInput}
               className="hidden"
               data-testid="input-file"
@@ -285,10 +425,10 @@ export default function UploadPage() {
             </div>
             <div className="text-center">
               <p className="text-sm font-medium">
-                {isDragActive ? "Drop your file here" : "Drop CSV file here or click to browse"}
+                {isDragActive ? "Drop your file here" : "Drop your file here or click to browse"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Supports Amazon Vine CSV exports
+                Supports CSV, Excel (.xlsx, .xls), and PDF files
               </p>
             </div>
           </div>
