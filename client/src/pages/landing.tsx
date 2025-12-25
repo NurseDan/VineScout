@@ -1,18 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, ScanBarcode, Warehouse, BarChart3, Tag, Upload, Shield, Clock } from "lucide-react";
+import { Package, ScanBarcode, Warehouse, BarChart3, Tag, Upload, Shield, Clock, ArrowRight, Users } from "lucide-react";
+import { Link } from "wouter";
 
 export default function LandingPage() {
   const features = [
     {
       icon: Package,
       title: "Inventory Tracking",
-      description: "Track all your Vine items from order to review completion with ease",
+      description: "Track all your review items from order to completion with ease",
     },
     {
       icon: ScanBarcode,
       title: "Barcode Scanning",
-      description: "Quick item lookup using USB barcode scanners or manual ASIN entry",
+      description: "Quick item lookup using USB barcode scanners or manual entry",
     },
     {
       icon: Warehouse,
@@ -36,6 +37,14 @@ export default function LandingPage() {
     },
   ];
 
+  const platforms = [
+    "Amazon Vine",
+    "Amazon Influencer",
+    "TikTok Shop",
+    "YouTube Reviews",
+    "Instagram Creators",
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <div className="relative overflow-hidden">
@@ -46,23 +55,28 @@ export default function LandingPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Package className="h-5 w-5" />
             </div>
-            <span className="text-xl font-semibold">Vine Tracker</span>
+            <span className="text-xl font-semibold">ReviewTrack</span>
           </div>
-          <Button asChild data-testid="button-login-header">
-            <a href="/api/login">Sign In</a>
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" asChild data-testid="button-waitlist-header">
+              <Link href="/waitlist">Join Waitlist</Link>
+            </Button>
+            <Button asChild data-testid="button-login-header">
+              <a href="/api/login">Sign In</a>
+            </Button>
+          </div>
         </header>
 
         <main className="relative z-10">
           <section className="px-6 py-16 text-center md:px-12 md:py-24">
             <h1 className="text-4xl font-bold tracking-tight md:text-5xl lg:text-6xl">
-              Manage Your Amazon Vine
+              The Ultimate Tool for
               <br />
-              <span className="text-primary">Inventory Effortlessly</span>
+              <span className="text-primary">Product Reviewers & Creators</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
-              The complete solution for Amazon Vine reviewers. Track items, manage storage, 
-              generate labels, and never miss a review deadline again.
+              Track inventory, manage storage, generate labels, and never miss a review deadline.
+              Built for Amazon Vine, Influencer Program, TikTok Shop, and more.
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <Button size="lg" asChild data-testid="button-get-started">
@@ -118,7 +132,7 @@ export default function LandingPage() {
         </main>
 
         <footer className="relative z-10 border-t px-6 py-8 text-center text-sm text-muted-foreground md:px-12">
-          <p>Vine Tracker - Inventory Management for Amazon Vine Reviewers</p>
+          <p>ReviewTrack - Inventory Management for Product Reviewers & Creators</p>
         </footer>
       </div>
     </div>

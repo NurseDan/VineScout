@@ -107,7 +107,7 @@ export function AppSidebar() {
             <Package className="h-5 w-5" />
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-semibold">Vine Tracker</span>
+            <span className="text-lg font-semibold">ReviewTrack</span>
             <span className="text-xs text-muted-foreground">Inventory Management</span>
           </div>
         </div>
@@ -151,7 +151,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-4">
         <div className="text-xs text-muted-foreground">
-          Vine Tracker Pro
+          ReviewTrack
         </div>
       </SidebarFooter>
     </Sidebar>

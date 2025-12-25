@@ -1149,5 +1149,46 @@ export async function registerRoutes(
     }
   });
 
+  // Waitlist - Public endpoints (no auth required)
+  app.post("/api/waitlist", async (req, res) => {
+    try {
+      const { email, platform, interestedFeatures } = req.body;
+
+      if (!email || !platform) {
+        return res.status(400).json({ error: "Email and platform are required" });
+      }
+
+      // Check if already signed up
+      const existing = await storage.getWaitlistSignupByEmail(email);
+      if (existing) {
+        return res.status(400).json({ error: "This email is already on the waitlist" });
+      }
+
+      const signup = await storage.createWaitlistSignup({ email, platform, interestedFeatures });
+      res.status(201).json({ success: true, signup });
+    } catch (error) {
+      console.error("Error creating waitlist signup:", error);
+      res.status(500).json({ error: "Failed to join waitlist" });
+    }
+  });
+
+  // Admin-only: Get all waitlist signups
+  app.get("/api/admin/waitlist", isAuthenticated, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const adminUserIds = (process.env.ADMIN_USER_IDS || "").split(",").map(id => id.trim());
+      
+      if (!adminUserIds.includes(userId)) {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const signups = await storage.getAllWaitlistSignups();
+      res.json({ signups, count: signups.length });
+    } catch (error) {
+      console.error("Error fetching waitlist signups:", error);
+      res.status(500).json({ error: "Failed to fetch waitlist signups" });
+    }
+  });
+
   return httpServer;
 }

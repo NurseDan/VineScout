@@ -35,12 +35,22 @@ type Subscription = {
 
 const tierIcons: Record<string, typeof Star> = {
   free: Star,
+  starter: Star,
   pro: Zap,
-  business: Crown,
+  creatorelite: Crown,
+  "creator elite": Crown,
 };
 
 const tierFeatures: Record<string, string[]> = {
   free: [
+    "Up to 100 inventory items",
+    "Basic inventory tracking",
+    "Manual CSV import",
+    "Basic dashboard & analytics",
+    "Barcode scanning (USB only)",
+    "Single storage location",
+  ],
+  starter: [
     "Up to 100 inventory items",
     "Basic inventory tracking",
     "Manual CSV import",
@@ -59,17 +69,25 @@ const tierFeatures: Record<string, string[]> = {
     "Label generation & printing",
     "Priority email support",
   ],
-  business: [
+  creatorelite: [
     "Everything in Pro",
-    "Team collaboration (up to 5 users)",
-    "API access for integrations",
-    "Custom Keepa & Rainforest API connections",
     "Marketplace to sell aged inventory",
     "Tax center & quarterly estimates",
     "Advanced storage optimization",
-    "Webhook integrations",
-    "Dedicated account manager",
-    "Custom integrations support",
+    "API access for integrations",
+    "Custom Keepa & Rainforest API connections",
+    "Priority support with faster response",
+    "Early access to new features",
+  ],
+  "creator elite": [
+    "Everything in Pro",
+    "Marketplace to sell aged inventory",
+    "Tax center & quarterly estimates",
+    "Advanced storage optimization",
+    "API access for integrations",
+    "Custom Keepa & Rainforest API connections",
+    "Priority support with faster response",
+    "Early access to new features",
   ],
 };
 

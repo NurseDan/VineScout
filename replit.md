@@ -1,7 +1,7 @@
-# Amazon Vine Inventory Management System
+# ReviewTrack - Inventory Management for Product Reviewers & Creators
 
 ## Overview
-A comprehensive, production-ready inventory management system for Amazon Vine reviewers. The app helps track items from order through review completion, manage physical storage, generate labels, provides analytics, and includes a marketplace for selling aged items.
+A comprehensive, production-ready inventory management system for product reviewers and content creators. Built for Amazon Vine, Amazon Influencer Program, TikTok Shop, YouTube reviewers, and more. The app helps track items from order through review completion, manage physical storage, generate labels, provides analytics, and includes a marketplace for selling aged items.
 
 ## Current State
 - **Production Ready**: Full database persistence with PostgreSQL
@@ -22,11 +22,12 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 8. **Data Export** - Export inventory to CSV or JSON
 9. **API Connections** - Connect third-party ASIN data APIs (Keepa, Rainforest)
 10. **Gmail Import** - Import Vine orders directly from Amazon email notifications
-11. **Membership Plans** - Free, Pro ($9.99/mo), Business ($29.99/mo) tiers via Stripe
+11. **Membership Plans** - Starter (free), Pro ($9.99/mo with 30-day trial), Creator Elite ($29.99/mo) tiers via Stripe
 12. **AI Assistant** - AI-powered inventory analysis, storage suggestions, price predictions (premium)
 13. **Marketplace** - Sell aged inventory items (6+ months old) to other users (premium)
 14. **Admin Dashboard** - System oversight and user management for administrators
 15. **Tax Center** - Track estimated taxes, quarterly payment deadlines, IRS Direct Pay integration, CSV/JSON exports
+16. **Waitlist Signup** - Public waitlist page for capturing interest before full launch
 
 ## Tech Stack
 - **Frontend**: React 18, Vite, TanStack Query, wouter, shadcn/ui, Tailwind CSS, Recharts
@@ -63,7 +64,8 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 │   │   ├── ai-assistant.tsx # AI inventory assistant
 │   │   ├── marketplace.tsx  # Item marketplace
 │   │   ├── admin.tsx        # Admin dashboard
-│   │   └── landing.tsx      # Public landing page
+│   │   ├── landing.tsx      # Public landing page
+│   │   └── waitlist.tsx     # Public waitlist signup
 │   └── App.tsx              # Main app with auth flow
 ├── server/
 │   ├── db.ts                # Database connection
@@ -157,6 +159,10 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - `GET /api/tax/summary` - Get quarterly tax estimates and YTD summary
 - `GET /api/tax/export` - Export tax report (CSV or JSON)
 
+### Waitlist (Public)
+- `POST /api/waitlist` - Sign up for waitlist (email, platform, optional features)
+- `GET /api/admin/waitlist` - Admin-only: View all waitlist signups
+
 ## Authentication Routes
 - `GET /api/login` - Start login flow
 - `GET /api/logout` - Logout user
@@ -173,11 +179,12 @@ A comprehensive, production-ready inventory management system for Amazon Vine re
 - **ApiConnection**: Third-party API connections (user-scoped)
 - **MarketplaceListing**: Items for sale with price, condition, status (user-scoped)
 - **TaxProfile**: User tax settings (filing status, state, tax rates, business info)
+- **WaitlistSignup**: Email, platform, interested features, createdAt (public)
 
 ## Membership Tiers
 - **Starter (Free forever)**: Basic inventory (up to 100 items), CSV import, basic analytics, single storage location
 - **Pro ($9.99/mo - 30-day free trial)**: Unlimited items, advanced analytics, AI assistant, multi-location storage, label generation, marketplace access
-- **Business ($29.99/mo)**: Team collaboration (5 users), API access, custom integrations, webhook support, dedicated support
+- **Creator Elite ($29.99/mo)**: Everything in Pro plus marketplace, tax center, advanced storage optimization, API access, priority support, early access to new features
 
 ## Item Lifecycle
 1. **Ordered** - Initial state from CSV import

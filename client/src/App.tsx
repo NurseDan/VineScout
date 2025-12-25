@@ -30,6 +30,7 @@ import LabelsPage from "@/pages/labels";
 import AnalyticsPage from "@/pages/analytics";
 import ConnectionsPage from "@/pages/connections";
 import LandingPage from "@/pages/landing";
+import WaitlistPage from "@/pages/waitlist";
 import MembershipPage from "@/pages/membership";
 import AIAssistantPage from "@/pages/ai-assistant";
 import MarketplacePage from "@/pages/marketplace";
@@ -139,6 +140,15 @@ function LoadingScreen() {
   );
 }
 
+function PublicRouter() {
+  return (
+    <Switch>
+      <Route path="/waitlist" component={WaitlistPage} />
+      <Route component={LandingPage} />
+    </Switch>
+  );
+}
+
 function AppContent() {
   const { user, isLoading } = useAuth();
 
@@ -147,7 +157,7 @@ function AppContent() {
   }
 
   if (!user) {
-    return <LandingPage />;
+    return <PublicRouter />;
   }
 
   return <AuthenticatedApp />;

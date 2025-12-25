@@ -329,3 +329,31 @@ export type TaxSummary = {
   quarters: QuarterlyTaxEstimate[];
   nextPaymentDue: QuarterlyTaxEstimate | null;
 };
+
+// Waitlist Signups - Capture interest before launch
+export const waitlistSignups = pgTable("waitlist_signups", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  email: varchar("email", { length: 255 }).notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  interestedFeatures: text("interested_features"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("waitlist_email_idx").on(table.email),
+  index("waitlist_platform_idx").on(table.platform),
+]);
+
+export const insertWaitlistSignupSchema = createInsertSchema(waitlistSignups).omit({ id: true, createdAt: true });
+export type InsertWaitlistSignup = z.infer<typeof insertWaitlistSignupSchema>;
+export type WaitlistSignup = typeof waitlistSignups.$inferSelect;
+
+// Platform options for waitlist
+export const PLATFORMS = {
+  AMAZON_VINE: "amazon_vine",
+  AMAZON_INFLUENCER: "amazon_influencer",
+  TIKTOK_SHOP: "tiktok_shop",
+  YOUTUBE: "youtube",
+  INSTAGRAM: "instagram",
+  OTHER: "other",
+} as const;
+
+export type Platform = typeof PLATFORMS[keyof typeof PLATFORMS];

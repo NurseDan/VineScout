@@ -24,6 +24,8 @@ import {
   type InsertTaxProfile,
   type TaxSummary,
   type QuarterlyTaxEstimate,
+  type WaitlistSignup,
+  type InsertWaitlistSignup,
   ITEM_STATUSES,
   API_PROVIDERS,
   LISTING_STATUSES,
@@ -38,6 +40,7 @@ import {
   marketplaceListings,
   taxProfiles,
   users,
+  waitlistSignups,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, sql, count, inArray } from "drizzle-orm";
@@ -136,6 +139,11 @@ export interface IStorage {
     binHeightIn: number,
     maxWeightLb?: number
   ): Promise<VineItem[]>;
+
+  // Waitlist (public - no userId required)
+  createWaitlistSignup(data: { email: string; platform: string; interestedFeatures?: string }): Promise<WaitlistSignup>;
+  getAllWaitlistSignups(): Promise<WaitlistSignup[]>;
+  getWaitlistSignupByEmail(email: string): Promise<WaitlistSignup | undefined>;
 }
 
 // Admin types
@@ -1203,6 +1211,36 @@ export class DatabaseStorage implements IStorage {
 
     // Filter and return matching items
     return itemsWithDimensions.filter(fitsInBin);
+  }
+
+  // Waitlist methods
+  async createWaitlistSignup(data: { email: string; platform: string; interestedFeatures?: string }): Promise<WaitlistSignup> {
+    const id = randomUUID();
+    const [signup] = await db
+      .insert(waitlistSignups)
+      .values({
+        id,
+        email: data.email,
+        platform: data.platform,
+        interestedFeatures: data.interestedFeatures || null,
+      })
+      .returning();
+    return signup;
+  }
+
+  async getAllWaitlistSignups(): Promise<WaitlistSignup[]> {
+    return await db
+      .select()
+      .from(waitlistSignups)
+      .orderBy(desc(waitlistSignups.createdAt));
+  }
+
+  async getWaitlistSignupByEmail(email: string): Promise<WaitlistSignup | undefined> {
+    const [signup] = await db
+      .select()
+      .from(waitlistSignups)
+      .where(eq(waitlistSignups.email, email));
+    return signup;
   }
 }
 
